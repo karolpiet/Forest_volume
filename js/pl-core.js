@@ -204,7 +204,7 @@
   // CHM of the area as a coloured PNG in lat/lon (2-32 m), resampled from the EPSG:2180
   // grid so it lines up with the map; returns {url, south, west, north, east}
   function chmImage(g, H, r0, c0, rows, cols) {
-    const stops = [[253, 231, 37], [94, 201, 98], [33, 145, 140], [59, 82, 139], [68, 1, 84]];
+    const stops = [[236, 244, 200], [173, 214, 120], [96, 166, 82], [38, 112, 62], [12, 58, 34]];  // light to dark green
     const xa = g.x0 + c0 * g.res, ya = g.y0 - r0 * g.res, xb = xa + cols * g.res, yb = ya - rows * g.res;
     const corners = [[xa, ya], [xb, ya], [xa, yb], [xb, yb]].map(([x, y]) => core.toWGS(x, y));
     const west = Math.min(...corners.map(c => c[0])), east = Math.max(...corners.map(c => c[0]));
@@ -239,5 +239,48 @@
   // the whole downloaded grid as an image (for the live canopy layer)
   const chmView = (g) => chmImage(g, g.chm, 0, 0, g.h, g.w);
 
-  ALS.pl = { loadChm, compute, findTrees, chmView, MAX_KM2 };
+  // --- when the laser scan was made: the NMPT sheet index (WFS "Skorowidze") ---------
+  // Each sheet of the surface model carries its acquisition date. Attribute names differ
+  // between the index layers, so any element whose name mentions a date is read and the
+  // newest date wins (the WCS serves the newest model). Returns {year, date} or null.
+  const WFS = [
+    'https://mapy.geoportal.gov.pl/wss/service/PZGIK/NumerycznyModelPokryciaTerenuEVRF2007/WFS/Skorowidze',
+    'https://mapy.geoportal.gov.pl/wss/service/PZGIK/NumerycznyModelPokryciaTerenuKRON86/WFS/Skorowidze',
+  ];
+  async function layersOf(url) {
+    try {
+      const r = await fetch(url + '?SERVICE=WFS&REQUEST=GetCapabilities&VERSION=2.0.0');
+      const names = (await r.text()).match(/gugik:SkorowidzNMPT\w*/g) || [];
+      return [...new Set(names)];
+    } catch (e) { return []; }
+  }
+  async function scanDate(polys) {
+    const [x0, y0, x1, y1] = core.bbox(polys);
+    const a = core.toWGS(x0, y0), b = core.toWGS(x1, y1);
+    // EPSG:4326 in WFS 2.0 is latitude first
+    const bb = [a[1], a[0], b[1], b[0]].map(v => v.toFixed(6)).join(',') + ',urn:ogc:def:crs:EPSG::4326';
+    const found = [];
+    await Promise.all(WFS.map(async (url) => {
+      const layers = await layersOf(url);
+      await Promise.all(layers.map(async (ly) => {
+        try {
+          const r = await fetch(url + '?SERVICE=WFS&REQUEST=GetFeature&VERSION=2.0.0&TYPENAMES=' + ly + '&COUNT=50&BBOX=' + encodeURIComponent(bb));
+          if (!r.ok) return;
+          const xml = await r.text();
+          const re = /<(?:\w+:)?(\w*(?:aktualnosc|data|Data|Aktualnosc)\w*)>\s*([^<]{4,30})\s*<\//g;
+          let m;
+          while ((m = re.exec(xml))) {
+            const d = m[2].match(/(19|20)\d\d(-\d\d(-\d\d)?)?/);
+            if (d && +d[0].slice(0, 4) >= 2000) found.push(d[0]);
+          }
+        } catch (e) { /* this index layer did not answer */ }
+      }));
+    }));
+    if (!found.length) return null;
+    found.sort();
+    const date = found[found.length - 1];
+    return { date, year: +date.slice(0, 4) };
+  }
+
+  ALS.pl = { loadChm, compute, findTrees, chmView, scanDate, MAX_KM2 };
 })(typeof window !== 'undefined' ? window : globalThis);

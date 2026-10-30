@@ -184,8 +184,10 @@
     if (mode === 'wyd' || mode === 'odd') {
       status(T('Looking up the Forest Data Bank (BDL)…'));
       try {
-        const a = await core.bdlArea(e.latlng.lng, e.latlng.lat, mode === 'odd');
-        if (!a) { status(T('No State Forests subcompartment here. The BDL publishes shapes only for State Forests; for a private forest pick the parcel or draw the area.'), 'err'); return; }
+        let a = await core.bdlArea(e.latlng.lng, e.latlng.lat, mode === 'odd');
+        // not State Forests: the non-state forest layer of the BDL
+        if (!a) { try { a = await core.bdlPrivateArea(e.latlng.lng, e.latlng.lat, mode === 'odd'); } catch (er) { a = null; } }
+        if (!a) { status(T('No forest subcompartment from the BDL at this point. Click inside the forest, or pick the parcel.'), 'err'); return; }
         run(() => a.label, a.polys);
       } catch (err) { status(T('The BDL service did not answer: {msg}', { msg: err.message }), 'err'); }
       return;
@@ -357,6 +359,16 @@
       r.innerHTML = `<div class="area-title">${label()}</div><div class="warn">${T('No elevation data for this area.')}</div>`;
       return;
     }
+    // not a single cell above 2 m on a sizeable area: almost always the surface model the
+    // service returned is wrong here (no vegetation in it), not a bare field. Say so instead of 0 m³.
+    if (w.forest_ha === 0 && w.shrub_ha === 0 && w.data_ha > 0.5) {
+      const d = w.diag;
+      r.innerHTML = `<div class="area-title">${label()}</div>
+        <div class="warn"><b>${T('No tree heights in the laser data for this place.')}</b><br>${T('The surface model (NMPT) that Geoportal returned here lies on the ground, so the trees cannot be measured. This is a gap or error in the data for this place, not a result of 0 m³.')}</div>` +
+        (d ? `<p class="note">${T('Diagnostics: surface {s} m, terrain {t} m, surface below terrain on {b}% and on the ground on {f}% of the cells, resolution {rs}/{rt} m.', { s: fmt(d.dsm, 1), t: fmt(d.dtm, 1), b: fmt(d.below * 100), f: fmt(d.flat * 100), rs: fmt(d.resS, 2), rt: fmt(d.resT, 2) })}</p>` : '') +
+        `<div id="bdl"></div>`;
+      return;
+    }
     const A = w.vol_trees, B = w.vol_canopy, mid = (A + B) / 2;
     // the range covers both methods and at least ±25% around their mean
     const lo = Math.min(A, B, 0.75 * mid), hi = Math.max(A, B, 1.25 * mid);
@@ -427,8 +439,10 @@
     if (b.loading) box.innerHTML = head + `<div class="note">${T('Asking bdl.lasy.gov.pl for forest subcompartments…')}</div>`;
     else if (b.error) box.innerHTML = head + `<div class="note">${T('The BDL service did not answer right now, so stand descriptions are missing.')}</div>`;
     else if (!b.items.length) box.innerHTML = head + `<div class="note">${T('This forest has no description in the Forest Data Bank.')}</div>`;
-    else if (b.private) box.innerHTML = `<h3>${T('Forest Data Bank (BDL): non-state forest')}</h3><table><tr><td><b>${T('Forest address')}</b></td><td><b>${T('ha here · species · age')}</b></td></tr>` +
-      b.items.map(p => `<tr><td>${String(p.adr_for || '').replace(/\s+/g, ' ')}${p.owner ? ` <small>(${p.owner})</small>` : ''}</td><td>~${fmt(p._ha, 2)} · ${p.species_cd || '–'} · ${p.spec_age ? T('{a} y in {y}', { a: p.spec_age, y: p.a_year || '?' }) : '–'}</td></tr>`).join('') +
+    else if (b.private || b.mixed) box.innerHTML = (b.mixed ? `<h3>${T('Forest Data Bank (BDL), RDLP {r}', { r: b.rdlp })}</h3><table><tr><td><b>${T('Forest address')}</b></td><td><b>${T('ha here · species · age')}</b></td></tr>` +
+      b.items.filter(p => !p._pts).map(p => `<tr><td>${String(p.adr_for || '').replace(/\s+/g, ' ')}</td><td>${fmt(p._ha, 2)} · ${p.species_cd || '–'} · ${p.spec_age || '–'}</td></tr>`).join('') + '</table>' : '') +
+      `<h3>${T('Forest Data Bank (BDL): non-state forest')}</h3><table><tr><td><b>${T('Forest address')}</b></td><td><b>${T('ha here · species · age')}</b></td></tr>` +
+      b.items.filter(p => p._pts).map(p => `<tr><td>${String(p.adr_for || '').replace(/\s+/g, ' ')}${p.owner ? ` <small>(${p.owner})</small>` : ''}</td><td>~${fmt(p._ha, 2)} · ${p.species_cd || '–'} · ${p.spec_age ? T('{a} y in {y}', { a: p.spec_age, y: p.a_year || '?' }) : '–'}</td></tr>`).join('') +
       `</table><p class="note">${T('From the forest management plan of a non-state forest (year of the description in the table). Hectares are approximate.')}</p>`;
     else box.innerHTML = `<h3>${T('Forest Data Bank (BDL), RDLP {r}', { r: b.rdlp })}</h3><table><tr><td><b>${T('Forest address')}</b></td><td><b>${T('ha here · species · age')}</b></td></tr>` +
       b.items.map(p => `<tr><td>${String(p.adr_for || '').replace(/\s+/g, ' ')}</td><td>${fmt(p._ha, 2)} · ${p.species_cd || '–'} · ${p.spec_age || '–'}</td></tr>`).join('') +
@@ -457,9 +471,12 @@
     if (!sc.year) { s.yt = { noScan: true }; if (shown === s) renderYield(); return; }
     const Y = ALS.yield, now = new Date().getFullYear();
     const lp = b.items.map(p => p._polys ? core.rings(p._polys) : null);
-    const pts = b.private ? b.items.flatMap((p, i) => (p._pts || []).map(q => [q[0], q[1], i])) : [];
+    // state stands have outlines; non-state ones only sample points, so a cell outside every
+    // outline goes to the nearest sample point
+    const pts = b.items.flatMap((p, i) => (p._pts || []).map(q => [q[0], q[1], i]));
     const owner = (x, y) => {
-      if (!b.private) { const i = lp.findIndex(r => r && core.contains(r, x, y)); return i < 0 ? null : i; }
+      const i = lp.findIndex(r => r && core.contains(r, x, y));
+      if (i >= 0 || !pts.length) return i < 0 ? null : i;
       let best = null, d = Infinity;
       for (const [px, py, i] of pts) { const e = (px - x) ** 2 + (py - y) ** 2; if (e < d) { d = e; best = i; } }
       return best;
@@ -549,12 +566,15 @@
       const { rdlp, items } = await core.bdl(polys);
       if (shown !== s) return;  // another area was picked meanwhile
       s.bdl = { rdlp, items };
-      // no State Forests here: look for a non-state forest plan (private, municipal…)
-      if (!items.length) {
+      // State Forests cover only part of the area (or none): look for non-state forest plans
+      // (private, municipal…) for the rest
+      const stateHa = items.reduce((a, p) => a + p._ha, 0);
+      if (stateHa < 0.8 * s.w.area_ha) {
         let priv = [];
         try { priv = await core.bdlPrivate(polys); } catch (e) { priv = []; }
         if (shown !== s) return;
-        s.bdl = { rdlp: null, items: priv, private: true };
+        if (!items.length) s.bdl = { rdlp: null, items: priv, private: true };
+        else if (priv.length) s.bdl = { rdlp, items: items.concat(priv), mixed: true };
       }
       if (items.length) bdlLayer = L.layerGroup(items.map(p => L.polygon(p._polys.map(pp => pp.map(r => r.map(([x, y]) => ll(x, y)))),
         { color: '#1d4e1d', weight: 1.5, fill: false, dashArray: '2 3' }).bindTooltip(String(p.adr_for || '')))).addTo(map);

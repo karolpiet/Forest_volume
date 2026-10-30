@@ -112,6 +112,11 @@ svg text{font:10px var(--sans);fill:var(--muted)}
 .fullbtn{width:40px;height:40px;border:0;border-radius:8px;background:#fffdf8f2;color:var(--pine);font:700 20px var(--sans);
   box-shadow:0 1px 6px #0003;cursor:pointer;padding:0}
 .fullbtn:hover{background:#fff}
+.drawbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px;background:#fffdf8f2;padding:8px;border-radius:10px;box-shadow:0 1px 8px #0004;font:13px var(--sans);max-width:calc(100vw - 30px)}
+.drawbar .db-msg{flex-basis:100%;font-weight:600;color:var(--pine)}
+.drawbar button{padding:8px 12px;font:600 14px var(--sans);border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--text);cursor:pointer}
+.drawbar button.primary{background:var(--fern);border-color:var(--fern);color:#fff}
+.drawbar button:disabled{opacity:.45;cursor:default}
 body.full .topbar,body.full #panel{display:none}
 #toggle{display:none;background:transparent;color:#f3eedf;border-color:#f3eedf55;padding:3px 9px}
 

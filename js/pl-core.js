@@ -61,17 +61,22 @@
       throw new Error(T('This area is too large for an on-the-fly calculation (bounding box {a} km², limit {max} km²). Draw a smaller part of it.', { a: km2.toFixed(1), max: MAX_KM2 }));
     }
     onStep && onStep(T('Downloading the surface and terrain models from Geoportal…'));
-    const [dsm, dtm] = await Promise.all([getGrid('nmpt', bb), getGrid('nmt', bb)]);
-    onStep && onStep(T('Computing canopy height…'));
-    let g = canopy(dsm, dtm);
-    // in some regions the KRON86 surface model shows no vegetation; the newer EVRF2007
-    // models then usually do, so they are tried and the one that sees trees is kept
-    if (g.diag && g.diag.tall < 0.01) {
+    // LIDAR PL-EVRF2007-NH first (the newer scans); PL-KRON86 only when that fails or
+    // shows no vegetation at all
+    let g = null;
+    try {
+      const [dsm, dtm] = await Promise.all([getGrid('nmpt', bb, 'evrf'), getGrid('nmt', bb, 'evrf')]);
+      g = canopy(dsm, dtm);
+      g.src = 'EVRF2007';
+    } catch (e) { g = null; }
+    if (!g || !g.diag || g.diag.tall < 0.01) {
       try {
-        const [d2, t2] = await Promise.all([getGrid('nmpt', bb, 'evrf'), getGrid('nmt', bb, 'evrf')]);
-        const g2 = canopy(d2, t2);
-        if (g2.diag && g2.diag.tall > g.diag.tall) g = g2;
-      } catch (e) { /* the proxy or the service does not offer EVRF2007 here */ }
+        const [dsm, dtm] = await Promise.all([getGrid('nmpt', bb), getGrid('nmt', bb)]);
+        onStep && onStep(T('Computing canopy height…'));
+        const g2 = canopy(dsm, dtm);
+        g2.src = 'KRON86';
+        if (!g || !g.diag || (g2.diag && g2.diag.tall > g.diag.tall)) g = g2;
+      } catch (e) { if (!g) throw e; }
     }
     return g;
   }
@@ -291,27 +296,42 @@
     const bbs = [[a[1], a[0], b[1], b[0]].map(v => v.toFixed(6)).join(',') + ',urn:ogc:def:crs:EPSG::4326',
       [y0, x0, y1, x1].map(v => v.toFixed(1)).join(',') + ',urn:ogc:def:crs:EPSG::2180',
       [x0, y0, x1, y1].map(v => v.toFixed(1)).join(',') + ',EPSG:2180'];
-    const found = [];
-    await Promise.all(WFS.map(async (url) => {
+    // EVRF2007 first (the models the heights come from), KRON86 only when it has nothing
+    const bySvc = WFS.map(() => ({ dates: [], older: 0 }));
+    await Promise.all(WFS.map(async (url, si) => {
+      const found = bySvc[si];
       const layers = await layersOf(url);
       await Promise.all(layers.flatMap(ly => bbs.map(async (bb) => {
         try {
           const r = await wfsGet(url + '?SERVICE=WFS&REQUEST=GetFeature&VERSION=2.0.0&TYPENAMES=' + ly + '&COUNT=50&BBOX=' + encodeURIComponent(bb));
           if (!r.ok) return;
           const xml = await r.text();
-          const re = /<(?:\w+:)?(\w*(?:aktualnosc|data|Data|Aktualnosc)\w*)>\s*([^<]{4,30})\s*<\//g;
+          if (!/<(\w+:)?(member|featureMember)\b/.test(xml)) return;  // no sheet of this layer here
+          let any = false;
+          const re = /<(?:\w+:)?(\w*(?:aktualnosc|Aktualnosc|data|Data|DATA|rok|Rok|ROK|nalot|Nalot)\w*)>\s*([^<]{4,30})\s*<\//g;
           let m;
           while ((m = re.exec(xml))) {
             const d = m[2].match(/(19|20)\d\d(-\d\d(-\d\d)?)?/);
-            if (d && +d[0].slice(0, 4) >= 2000) found.push(d[0]);
+            if (d && +d[0].slice(0, 4) >= 2000) { found.dates.push(d[0]); any = true; }
+          }
+          // the index layers are split by year ("2024", "2025", "2023 i starsze"): the name tells it
+          const y = ly.match(/(20\d\d)/);
+          if (!any && y) {
+            if (/starsze|older|wczesn/i.test(ly)) found.older = Math.max(found.older, +y[1]);
+            else found.dates.push(y[1]);
           }
         } catch (e) { /* this index layer did not answer */ }
       })));
     }));
-    if (!found.length) return null;
-    found.sort();
-    const date = found[found.length - 1];
-    return { date, year: +date.slice(0, 4) };
+    for (const f of bySvc) {
+      if (f.dates.length) {
+        f.dates.sort();
+        const date = f.dates[f.dates.length - 1];
+        return { date, year: +date.slice(0, 4) };
+      }
+      if (f.older) return { older: f.older };
+    }
+    return null;
   }
 
   // --- stands: top height and canopy cover per BDL stand, on 10 m cells ---------------

@@ -132,6 +132,8 @@
     if ((m === 'wyd' || m === 'odd') && !map.hasLayer(bdlWms)) bdlWms.addTo(map);
     map.getContainer().style.cursor = m === 'draw' ? 'crosshair' : '';
     drawPts = []; redrawLine();
+    // on a phone the map needs the whole screen to draw on
+    if (m === 'draw' && window.innerWidth < 760 && !$('panel').classList.contains('min')) $('toggle').click();
   }
   $('mPick').onclick = () => setMode('pick');
   $('mWyd').onclick = () => setMode('wyd');
@@ -168,9 +170,34 @@
 
   const help = () => `<div class="help"><h3>${T('How it works (title)')}</h3>` + T('HELP', { max: pl.MAX_KM2 }) + '</div>';
 
+  // the corners get dots and the outline closes back to the first one, so every tap shows
   function redrawLine() {
     if (drawLine) map.removeLayer(drawLine);
-    drawLine = drawPts.length ? L.polyline(drawPts, { color: '#e09a2c', weight: 3, dashArray: '4 4' }).addTo(map) : null;
+    drawLine = drawPts.length ? L.layerGroup([
+      L.polyline(drawPts.length >= 3 ? drawPts.concat([drawPts[0]]) : drawPts, { color: '#e09a2c', weight: 3, dashArray: '4 4', interactive: false }),
+      ...drawPts.map((p, i) => L.circleMarker(p, { radius: i ? 5 : 8, color: '#fff', weight: 2, fillColor: '#e09a2c', fillOpacity: 1, interactive: false }))]).addTo(map) : null;
+    if (drawBar.getContainer()) updateDrawBar();
+  }
+
+  // buttons on the map itself while drawing: reachable on a phone and in full-screen mode
+  const drawBar = L.control({ position: 'bottomleft' });
+  drawBar.onAdd = () => {
+    const el = L.DomUtil.create('div', 'drawbar');
+    L.DomEvent.disableClickPropagation(el);
+    return el;
+  };
+  drawBar.addTo(map);
+  function updateDrawBar() {
+    const el = drawBar.getContainer();
+    if (mode !== 'draw') { el.style.display = 'none'; return; }
+    el.style.display = '';
+    el.innerHTML = `<div class="db-msg">${drawPts.length < 3 ? T('Tap the map to add corners ({n} so far)', { n: drawPts.length }) : T('{n} corners', { n: drawPts.length })}</div>
+      <button type="button" class="db-undo"${drawPts.length ? '' : ' disabled'}>↶ ${T('Undo')}</button>
+      <button type="button" class="db-done primary"${drawPts.length >= 3 ? '' : ' disabled'}>✓ ${T('Finish the shape')}</button>
+      <button type="button" class="db-cancel">✕</button>`;
+    el.querySelector('.db-undo').onclick = () => { drawPts.pop(); redrawLine(); };
+    el.querySelector('.db-done').onclick = () => { if (drawPts.length >= 3) finishDraw(); };
+    el.querySelector('.db-cancel').onclick = () => setMode('pick');
   }
 
   map.on('click', async (e) => {
@@ -202,6 +229,7 @@
     const ring = pts.map(p => core.toPL(p.lng, p.lat));
     ring.push(ring[0]);
     setMode('pick');
+    if ($('panel').classList.contains('min')) $('toggle').click();  // the result and any error show in the panel
     run(() => T('Drawn area'), [[ring]]);
   }
 
@@ -298,7 +326,7 @@
           fillColor: t.h > 25 ? '#0c3a22' : t.h > 18 ? '#3f7a4a' : '#add678', fillOpacity: 0.55 })
           .bindPopup(() => treePopup(t)).addTo(trees));
       }
-      shown = lastCalc = { label, w, bdl: null };
+      shown = lastCalc = { label, w, bdl: null, polys };
       setNav('navCalc');
       render();
       // on a phone the panel sits under the map: bring the result into view
@@ -366,7 +394,7 @@
       r.innerHTML = `<div class="area-title">${label()}</div>
         <div class="warn"><b>${T('No tree heights in the laser data for this place.')}</b><br>${T('The surface model (NMPT) that Geoportal returned here lies on the ground, so the trees cannot be measured. This is a gap or error in the data for this place, not a result of 0 m³.')}</div>` +
         (d ? `<p class="note">${T('Diagnostics: surface {s} m, terrain {t} m, surface below terrain on {b}% and on the ground on {f}% of the cells, resolution {rs}/{rt} m.', { s: fmt(d.dsm, 1), t: fmt(d.dtm, 1), b: fmt(d.below * 100), f: fmt(d.flat * 100), rs: fmt(d.resS, 2), rt: fmt(d.resT, 2) })}</p>` : '') +
-        `<div id="bdl"></div>`;
+        dbgLinks(shown.polys) + `<div id="bdl"></div>`;
       return;
     }
     const A = w.vol_trees, B = w.vol_canopy, ab = (A + B) / 2;
@@ -439,6 +467,14 @@
     renderYield();
   }
 
+  // direct links to what the proxy gets from Geoportal for this box, to see the raw answer
+  function dbgLinks(polys) {
+    if (!polys) return '';
+    const b = core.bbox(polys).map((v, i) => i < 2 ? Math.floor(v) : Math.ceil(v)).join(',');
+    const a = (m, v) => `<a href="${ALS.PROXY}?m=${m}&bbox=${b}&debug=1${v ? '&v=' + v : ''}" target="_blank" rel="noopener">${m.toUpperCase()}${v ? ' EVRF2007' : ' KRON86'}</a>`;
+    return `<p class="note">${T('Check what Geoportal sends:')} ${a('nmpt')} · ${a('nmt')} · ${a('nmpt', 'evrf')} · ${a('nmt', 'evrf')}</p>`;
+  }
+
   function renderBdl() {
     const box = $('bdl'), b = shown && shown.bdl;
     if (!box || !b) return;
@@ -465,7 +501,7 @@
     if (yt && yt.ok && yt.share >= 0.5) { sp.innerHTML = ''; return; }  // the headline already uses the species
     sp.innerHTML = share > 0.3 ? `<div class="warn">${T('According to the Forest Data Bank, {p}% of the stands here are dominated by species other than pine ({sp}). The pine formulas can be well off for them.',
       { p: fmt(share * 100), sp: Object.keys(other).sort((x, y) => other[y] - other[x]).slice(0, 4).join(', ') })}` +
-      (shown.scan && shown.scan.unknown ? ' <b>' + T('Type the scan year above and the result will be computed from the yield tables for these species.') + '</b>' : '') + '</div>' : '';
+      (shown.scan && (shown.scan.unknown || shown.scan.older) ? ' <b>' + T('Type the scan year above and the result will be computed from the yield tables for these species.') + '</b>' : '') + '</div>' : '';
   }
 
   // --- C) yield tables: species and age from BDL, top height from the laser data ----------
@@ -550,9 +586,9 @@
     const el = $('scan'), sc = shown && shown.scan;
     if (!el || !sc) return;
     if (sc.loading) { el.textContent = T('Checking when the laser scan was made…'); return; }
-    if (sc.unknown) {
+    if (sc.unknown || sc.older) {
       // the sheet index could not be read: the year shown on Geoportal can be typed in
-      el.innerHTML = T('Laser scan date: could not be read. Type the year from Geoportal:') +
+      el.innerHTML = (sc.older ? T('Laser scan: {y} or earlier. Type the exact year from Geoportal:', { y: sc.older }) : T('Laser scan date: could not be read. Type the year from Geoportal:')) +
         ` <input id="scanYear" type="number" min="2006" max="${new Date().getFullYear()}" placeholder="2019" inputmode="numeric"> <button type="button" id="scanOk" class="small">OK</button>`;
       const set = () => {
         const v = +$('scanYear').value;

@@ -4,6 +4,11 @@
   const ALS = (root.ALS = root.ALS || {});
 
   const PL = {
+  "Laser scan: {y} or earlier. Type the exact year from Geoportal:": "Skaning laserowy: {y} lub wcześniej. Wpisz dokładny rok z Geoportalu:",
+  "Check what Geoportal sends:": "Sprawdź, co wysyła Geoportal:",
+  "Tap the map to add corners ({n} so far)": "Stukaj w mapę, żeby dodać narożniki (na razie {n})",
+  "{n} corners": "Narożników: {n}",
+  "Undo": "Cofnij",
   "Today, from the yield tables for {sp} (species and age from the BDL). Pine formulas A/B: {a}–{b} m³.": "Na dziś, z tablic zasobności dla: {sp} (gatunek i wiek z BDL). Wzory dla sosny A/B: {a}–{b} m³.",
   "From the pine formulas A and B.": "Ze wzorów dla sosny (A i B).",
   "For comparison: pine formulas": "Dla porównania: wzory dla sosny",
@@ -173,6 +178,11 @@
   };
 
   const DE = {
+  "Laser scan: {y} or earlier. Type the exact year from Geoportal:": "Laserscan: {y} oder früher. Genaues Jahr aus dem Geoportal eingeben:",
+  "Check what Geoportal sends:": "Prüfen, was das Geoportal sendet:",
+  "Tap the map to add corners ({n} so far)": "Tippen Sie auf die Karte, um Ecken zu setzen (bisher {n})",
+  "{n} corners": "{n} Ecken",
+  "Undo": "Rückgängig",
   "Today, from the yield tables for {sp} (species and age from the BDL). Pine formulas A/B: {a}–{b} m³.": "Heute, aus den Ertragstafeln für {sp} (Baumart und Alter aus der BDL). Kiefernformeln A/B: {a}–{b} m³.",
   "From the pine formulas A and B.": "Aus den Kiefernformeln A und B.",
   "For comparison: pine formulas": "Zum Vergleich: Kiefernformeln",

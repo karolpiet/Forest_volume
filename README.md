@@ -18,6 +18,10 @@ A rough, honest estimate of how many cubic metres of timber stand on a forest in
 
 A live canopy height layer is drawn for the current map view anywhere in Poland (zoom 16+).
 
+**Where am I.** The ◎ button shows the phone's GPS position and follows it; tapping the dot can pick the parcel you are standing on.
+
+**Greenness (NDVI) from Sentinel-2.** An optional layer (zoom 12+) reads the newest Sentinel-2 L2A scene of the last year with at most 10 % cloud over the tile, straight from the public archive on AWS (Element 84, bucket `sentinel-cogs`, no key needed). Only the pixels around the view (up to 9 × 9 km) are downloaded from the cloud-optimised GeoTIFFs (red B04, near-infrared B08, scene classification SCL to hide clouds, shadows and snow). "Older image" steps back through the scenes. "Loss since a year ago" compares it with the clear scene closest to the same day a year before and marks where NDVI dropped, only where it was green before: fresh clear-cuts show up as red patches (on farmland the same colour just means a harvested crop).
+
 ## Limits
 
 - An estimate, not a measurement (±25 % at best). The surface model is coarser than a raw point cloud, so in dense stands crowns merge and the tree count is usually too low; method B is the steadier number.
@@ -30,7 +34,7 @@ A live canopy height layer is drawn for the current map view anywhere in Poland 
 
 - Static site (GitHub Pages), no build step: Leaflet, proj4, geotiff.js in `vendor/`.
 - The GUGiK WCS sends no CORS headers, so the elevation models go through a small Cloudflare Worker (`?m=nmt|nmpt&bbox=x0,y0,x1,y1` in EPSG:2180, max 1 km², cached for 7 days).
-- `js/core.js`: projections, parcels (ULDK), BDL, file import. `js/pl-core.js`: elevation download, canopy height, trees, volume. `js/i18n.js`: EN / PL / DE texts. `js/app.js`: the map and the panel.
+- `js/core.js`: projections, parcels (ULDK), BDL, file import. `js/pl-core.js`: elevation download, canopy height, trees, volume. `js/i18n.js`: EN / PL / DE texts. `js/sentinel.js`: Sentinel-2 scene search and NDVI. `js/app.js`: the map and the panel.
 
 ## Credits
 

@@ -115,6 +115,18 @@ svg text{font:10px var(--sans);fill:var(--muted)}
 .fullbtn{width:40px;height:40px;border:0;border-radius:8px;background:#fffdf8f2;color:var(--pine);font:700 20px var(--sans);
   box-shadow:0 1px 6px #0003;cursor:pointer;padding:0}
 .fullbtn:hover{background:#fff}
+.locbtn{font-size:22px}
+.locbtn.on{color:#1a73e8}
+.locbtn.wait{animation:locblink 1s ease-in-out infinite}
+@keyframes locblink{50%{opacity:.4}}
+.locpop{font:13px var(--sans);line-height:1.45}
+.locpop button{margin-top:6px;padding:6px 10px;font:600 13px var(--sans);border-radius:8px;border:0;background:var(--fern);color:#fff;cursor:pointer}
+.ndvibox{max-width:260px}
+.ndvibox .nd-msg{margin:3px 0;color:var(--muted)}
+.ndvibox .classes{margin-top:4px}
+.ndvibox .nd-btns{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center;margin-top:6px}
+.ndvibox .nd-btns button{padding:4px 8px;font:600 12px var(--sans);border-radius:6px;border:1px solid var(--line);background:#fff;color:var(--text);cursor:pointer}
+.ndvibox label{display:flex;align-items:center;gap:4px;cursor:pointer}
 .drawbar{display:flex;flex-wrap:wrap;align-items:center;gap:6px;background:#fffdf8f2;padding:8px;border-radius:10px;box-shadow:0 1px 8px #0004;font:13px var(--sans);max-width:calc(100vw - 30px)}
 .drawbar .db-msg{flex-basis:100%;font-weight:600;color:var(--pine)}
 .drawbar button{padding:8px 12px;font:600 14px var(--sans);border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--text);cursor:pointer}
@@ -145,6 +157,8 @@ body.full .topbar,body.full #panel{display:none}
   .legend .bar{width:80px;height:6px;margin:2px 0}
   .legend .classes{column-gap:6px}
   .legend .cls i{width:10px;height:8px}
+  .ndvibox{max-width:220px}
+  .ndvibox .classes{grid-template-rows:repeat(4,auto)}
   .leaflet-control-scale{display:none}
   .leaflet-control-attribution{font-size:9px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #panel.min{height:auto;max-height:0;overflow:hidden;border-top:0}

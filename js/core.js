@@ -388,8 +388,13 @@
   }
   async function bdlPrivateArea(lon, lat, whole) {
     const at = await bdlRest({ geometry: lon + ',' + lat, geometryType: 'esriGeometryPoint', inSR: '4326', spatialRel: 'esriSpatialRelIntersects' });
-    if (!at.length) return null;
-    const f = at[0], adr = field(f.a, /^adr|adres|adress/i);
+    // the service sometimes also answers with a large region outline (a whole regional
+    // directorate, tens of thousands of km²) that has no forest address; only real
+    // subcompartments are kept: with an address and under 500 ha, the smallest one first
+    const sub = at.filter(g => field(g.a, /^adr|adres|adress/i) && g.polys.length && polyArea(g.polys) < 500 * 1e4)
+      .sort((a, b) => polyArea(a.polys) - polyArea(b.polys));
+    if (!sub.length) return null;
+    const f = sub[0], adr = field(f.a, /^adr|adres|adress/i);
     const sp = field(f.a, /species_cd/i), age = field(f.a, /species_age|spec_age/i);
     const desc = () => [sp, age ? T('{n} y', { n: age }) : ''].filter(Boolean).join(', ');
     if (!whole || !adr) {
@@ -397,7 +402,7 @@
     }
     const key = compartment(adr), d = 0.01;
     const all = await bdlRest({ geometry: [lon - d * 1.6, lat - d, lon + d * 1.6, lat + d].join(','), geometryType: 'esriGeometryEnvelope', inSR: '4326', spatialRel: 'esriSpatialRelIntersects' });
-    const polys = all.filter(g => compartment(field(g.a, /^adr|adres|adress/i)) === key).flatMap(g => g.polys);
+    const polys = all.filter(g => compartment(field(g.a, /^adr|adres|adress/i)) === key && polyArea(g.polys) < 500 * 1e4).flatMap(g => g.polys);
     return { get label() { return T('Compartment {key}', { key }); }, polys: polys.length ? polys : f.polys };
   }
 

@@ -47,7 +47,7 @@
     'geoportal,dzialki,numery_dzialek', { minZoom: 16, version: '1.1.1', attribution: 'Parcels &copy; GUGiK (KIEG)' });
   const bdlWms = new ViewWms('https://mapserver.bdl.lasy.gov.pl/ArcGIS/services/WMS_BDL/mapserver/WMSServer',
     '0,1,2,3', { minZoom: 13, attribution: 'Forest Data Bank &copy; BDL' });
-  const chmLayer = L.layerGroup(), trees = L.layerGroup(), liveChm = L.layerGroup();
+  const chmLayer = L.layerGroup(), trees = L.layerGroup(), liveChm = L.layerGroup(), ndviLayer = L.layerGroup();
   orto.addTo(map); kieg.addTo(map); chmLayer.addTo(map); liveChm.addTo(map);
 
   // the layer control has no API to rename entries, so it is rebuilt when the language changes
@@ -57,7 +57,8 @@
     layers = L.control.layers(
       { [T('Orthophoto (Geoportal)')]: orto, 'OpenStreetMap': osm },
       { [T('Canopy height in view (zoom 16+)')]: liveChm, [T('Canopy height of the selected area')]: chmLayer,
-        [T('Tree tops (computed)')]: trees, [T('Cadastral parcels')]: kieg, [T('Forest subcompartments (BDL)')]: bdlWms },
+        [T('Tree tops (computed)')]: trees, [T('Cadastral parcels')]: kieg, [T('Forest subcompartments (BDL)')]: bdlWms,
+        [T('Greenness NDVI – Sentinel-2 (zoom 12+)')]: ndviLayer },
       { collapsed: window.innerWidth < 760 }).addTo(map);
   }
   buildLayers();
@@ -127,6 +128,138 @@
     return b;
   };
   full.addTo(map);
+
+  // --- where am I: the phone's GPS position on the map --------------------------
+  // the first fix centres the map, then the dot follows; a second tap switches it off
+  let locOn = false, locFirst = false, locDot = null, locRing = null, locLast = null;
+  const locBtn = L.control({ position: 'topleft' });
+  locBtn.onAdd = () => {
+    const b = L.DomUtil.create('button', 'fullbtn locbtn');
+    b.type = 'button';
+    b.textContent = '◎';
+    b.title = T('Show where I am');
+    L.DomEvent.disableClickPropagation(b);
+    b.onclick = () => (locOn ? stopLoc() : startLoc());
+    return b;
+  };
+  locBtn.addTo(map);
+  function stopLoc() {
+    locOn = false;
+    map.stopLocate();
+    for (const l of [locDot, locRing]) if (l) map.removeLayer(l);
+    locDot = locRing = null;
+    locBtn.getContainer().classList.remove('on', 'wait');
+  }
+  function startLoc() {
+    if (!navigator.geolocation) { status(T('This browser cannot read the location.'), 'err'); return; }
+    locOn = true; locFirst = true;
+    locBtn.getContainer().classList.add('on', 'wait');
+    map.locate({ watch: true, enableHighAccuracy: true, maximumAge: 5000, timeout: 30000 });
+  }
+  function locPopup(p, acc) {
+    const el = L.DomUtil.create('div', 'locpop');
+    L.DomEvent.on(el, 'click', L.DomEvent.stopPropagation);
+    el.innerHTML = `<b>${T('You are here')}</b><br>${p.lat.toFixed(5)}, ${p.lng.toFixed(5)} · ±${fmt(acc)} m<br>` +
+      `<button type="button" class="primary small">${T('Pick the parcel I am standing on')}</button>`;
+    el.querySelector('button').onclick = () => {
+      map.closePopup();
+      if (map.getZoom() < 16) map.setView(p, 16);
+      setMode('pick');
+      map.fire('click', { latlng: p, containerPoint: map.latLngToContainerPoint(p) });
+    };
+    return el;
+  }
+  map.on('locationfound', (e) => {
+    if (!locOn) return;
+    locBtn.getContainer().classList.remove('wait');
+    const acc = Math.max(e.accuracy || 0, 1);
+    if (!locDot) {
+      locRing = L.circle(e.latlng, { radius: acc, color: '#1a73e8', weight: 1, fillOpacity: 0.12, interactive: false }).addTo(map);
+      locDot = L.circleMarker(e.latlng, { radius: 8, color: '#fff', weight: 3, fillColor: '#1a73e8', fillOpacity: 1 }).addTo(map)
+        .bindPopup(() => locPopup(locLast.p, locLast.acc));
+    } else { locRing.setLatLng(e.latlng).setRadius(acc); locDot.setLatLng(e.latlng); }
+    locLast = { p: e.latlng, acc };
+    if (locFirst) { locFirst = false; map.setView(e.latlng, Math.max(map.getZoom(), 16)); }
+  });
+  map.on('locationerror', (e) => {
+    if (!locOn) return;
+    // code 1: permission refused; the phone keeps trying after a timeout, so only that stops it
+    if (e.code === 1) { stopLoc(); status(T('Location access was refused. Allow it for this page in the browser settings.'), 'err'); }
+    else if (locFirst) status(T('Waiting for the GPS position… In a dense forest this can take a minute.'));
+  });
+
+  // --- greenness (NDVI) from Sentinel-2 ------------------------------------------
+  // the newest scene of the last year with at most 10% cloud over the tile and the view
+  // seen clearly; "older" steps back through the scenes, the loss mode compares it with a
+  // scene from a year before, which shows fresh clear-cuts
+  let ndviSeq = 0, ndviTimer = null, ndviBefore = null, ndviLoss = false, ndviShown = null;
+  const ndviBox = L.control({ position: 'bottomleft' });
+  ndviBox.onAdd = () => {
+    const el = L.DomUtil.create('div', 'legend ndvibox');
+    L.DomEvent.disableClickPropagation(el);
+    // the box is redrawn while a click on its buttons is still on its way up; Leaflet then no
+    // longer sees that the click came from the box and took it as a click on the map (which
+    // picked the parcel under the button), so clicks are stopped here outright
+    L.DomEvent.on(el, 'click', L.DomEvent.stopPropagation);
+    L.DomEvent.disableScrollPropagation(el);
+    return el;
+  };
+  const dateFmt = (d) => new Date(d + 'T12:00:00Z').toLocaleDateString(ALS.locale(), { day: 'numeric', month: 'long', year: 'numeric' });
+  function ndviLegend(classes, labels) {
+    return `<div class="classes">${classes.filter(([, c]) => c).map(([, c], i) => `<div class="cls"><i style="background:${c}"></i>${labels[i]}</div>`).join('')}</div>`;
+  }
+  function renderNdviBox(st) {
+    const el = ndviBox.getContainer();
+    if (!el) return;
+    let h = `<b>${T('Greenness (NDVI), Sentinel-2')}</b>`;
+    if (st.msg) h += `<div class="nd-msg">${st.msg}</div>`;
+    const sc = st.scene;
+    if (sc) {
+      h += `<div>${T('Image of {d}, clouds over the tile {c}%', { d: dateFmt(sc.date), c: fmt(sc.cloud) })}</div>`;
+      if (ndviLoss && st.old) h += `<div>${T('compared with {d}', { d: dateFmt(st.old.date) })}</div>`;
+      h += ndviLoss && st.old
+        ? ndviLegend(ALS.s2.DIFF_CLASSES, [T('large loss of green (clear-cut?)'), T('clear loss'), T('slight loss')])
+        : ndviLegend(ALS.s2.NDVI_CLASSES, [T('water'), T('bare soil, clear-cut'), T('sparse plants'), T('grass, young growth'),
+          T('green'), T('forest'), T('dense forest')]);
+    }
+    h += `<div class="nd-btns"><button type="button" data-a="older">${T('Older image')}</button>` +
+      (ndviBefore ? `<button type="button" data-a="newest">${T('Newest')}</button>` : '') +
+      `<label><input type="checkbox" data-a="loss"${ndviLoss ? ' checked' : ''}> ${T('Loss since a year ago')}</label></div>`;
+    el.innerHTML = h;
+    el.querySelector('[data-a=older]').onclick = () => { if (ndviShown) { ndviBefore = ndviShown.date; updateNdvi(); } };
+    const nw = el.querySelector('[data-a=newest]');
+    if (nw) nw.onclick = () => { ndviBefore = null; updateNdvi(); };
+    el.querySelector('[data-a=loss]').onchange = (e) => { ndviLoss = e.target.checked; updateNdvi(); };
+  }
+  async function updateNdvi() {
+    const seq = ++ndviSeq;
+    if (!map.hasLayer(ndviLayer)) { ndviLayer.clearLayers(); ndviBox.remove(); return; }
+    if (!ndviBox._map) ndviBox.addTo(map);
+    if (map.getZoom() < 12) { ndviLayer.clearLayers(); renderNdviBox({ msg: T('Zoom in closer (zoom 12+) to see the satellite image.') }); return; }
+    const b = map.getBounds(), view = { west: b.getWest(), east: b.getEast(), south: b.getSouth(), north: b.getNorth() };
+    const busyMsg = (it) => { if (seq === ndviSeq) renderNdviBox({ msg: T('Reading the image of {d}…', { d: dateFmt(it.date) }) }); };
+    renderNdviBox({ msg: T('Looking for a clear image…') });
+    try {
+      const r = await ALS.s2.ndviView(view, { before: ndviBefore || '9999', onTry: busyMsg });
+      if (seq !== ndviSeq) return;
+      if (!r.scene) { ndviLayer.clearLayers(); ndviShown = null; renderNdviBox({ msg: T('No clear image (clouds ≤ 10%) of this place in the last year.') }); return; }
+      ndviShown = r.scene;
+      let img = r.img, old = null, msg = '';
+      if (ndviLoss) {
+        renderNdviBox({ scene: r.scene, msg: T('Looking for an image from a year before…') });
+        const d = await ALS.s2.lossView(r.scene, r.tile, view, { onTry: busyMsg });
+        if (seq !== ndviSeq) return;
+        if (d.old) { img = d.img; old = d.old; } else msg = T('No clear image from a year before; showing NDVI.');
+      }
+      ndviLayer.clearLayers();
+      L.imageOverlay(img.url, [[img.south, img.west], [img.north, img.east]], { opacity: 0.75, interactive: false }).addTo(ndviLayer);
+      renderNdviBox({ scene: r.scene, old, msg });
+    } catch (e) {
+      if (seq === ndviSeq) renderNdviBox({ msg: T('The Sentinel-2 archive did not answer: {msg}', { msg: e.message }) });
+    }
+  }
+  map.on('moveend', () => { if (map.hasLayer(ndviLayer)) { clearTimeout(ndviTimer); ndviTimer = setTimeout(updateNdvi, 700); } });
+  map.on('overlayadd overlayremove', (e) => { if (e.layer === ndviLayer) updateNdvi(); });
 
   // --- UI state -------------------------------------------------------------
   let mode = 'pick', drawPts = [], drawLine = null, areaLayer = null, areaLine = null, bdlLayer = null, busy = false;
@@ -238,6 +371,9 @@
         // not State Forests: the non-state forest layer of the BDL
         if (!a) { try { a = await core.bdlPrivateArea(e.latlng.lng, e.latlng.lat, mode === 'odd'); } catch (er) { a = null; } }
         if (!a) { status(T('No forest subcompartment from the BDL at this point. Click inside the forest, or pick the parcel.'), 'err'); return; }
+        // a last guard against a wrong shape from the service: no subcompartment or
+        // compartment is anywhere near 10 km², so such an answer is not drawn at all
+        if (core.polyArea(a.polys) > 10e6) { status(T('The BDL returned a far too large area here ({a} km²), not a subcompartment. Click a little further inside the forest, or pick the parcel.', { a: fmt(core.polyArea(a.polys) / 1e6) }), 'err'); return; }
         run(() => a.label, a.polys);
       } catch (err) { status(T('The BDL service did not answer: {msg}', { msg: err.message }), 'err'); }
       return;
@@ -412,6 +548,7 @@
       <li><b>${T('Cadastral parcels')}</b> – GUGiK, ${T('parcel locator (ULDK) and county registers (KIEG)')}</li>
       <li><b>${T('Forest subcompartments, species and age')}</b> – ${T('State Forests – Forest Data Bank')} (bdl.lasy.gov.pl)</li>
       <li><b>${T('Orthophoto and base map')}</b> – GUGiK, OpenStreetMap</li>
+      <li><b>${T('Greenness (NDVI)')}</b> – Copernicus Sentinel-2 L2A (ESA), ${T('public archive on AWS (Element 84), 10 m pixels, a new image every few days')}</li>
     </ul><p class="note">${T('All of it is free public data. The calculation runs in your browser; nothing you draw or upload is sent anywhere except the area’s bounding box to fetch the elevation data.')}</p></div>`;
 
   function render() {
@@ -673,6 +810,8 @@
     buildLayers();
     if (areaLine && areaLabel) areaLine.setTooltipContent(areaLabel());
     if (legend._map) { legend.remove(); legend.addTo(map); }
+    if (ndviBox._map) updateNdvi();
+    locBtn.getContainer().title = T('Show where I am');
     updateZoomHint();
     showHint();
     if (shown && shown.page) $('result').innerHTML = PAGES[shown.page]();

@@ -102,13 +102,13 @@
   zoomHint.addTo(map);
   function updateZoomHint() {
     const el = zoomHint.getContainer();
-    // on a phone the second, longer note would cover the map, so only the short one is shown there
+    // on a phone any note covers too much of the map, so none is shown there
     const small = window.innerWidth < 760;
-    el.style.display = map.hasLayer(kieg) && map.getZoom() < (small ? 16 : 18) ? '' : 'none';
+    el.style.display = !small && map.hasLayer(kieg) && map.getZoom() < 18 ? '' : 'none';
     el.textContent = map.getZoom() < 16 ? T('Zoom in to see parcel boundaries')
       : T('Some counties show parcels only when zoomed in further');
   }
-  map.on('zoomend overlayadd overlayremove', updateZoomHint);
+  map.on('zoomend overlayadd overlayremove resize', updateZoomHint);
   updateZoomHint();
 
   // full-screen map: hides the top bar and the panel, the same button brings them back

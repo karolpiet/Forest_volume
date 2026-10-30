@@ -372,7 +372,36 @@
     return Object.values(by).map(h => Object.assign(h, { _ha: area * h.n / pts.length, _approx: true })).sort((a, b) => b._ha - a._ha);
   }
 
-  ALS.core = { compute, loadChm, loadTrees, parcelByXY, parcelById, bdl, bdlPrivate, parseFile, parseWkt,
+  // --- non-state forests (layer "Wydzielenia poza PGL LP wg PUL"): shapes from the ArcGIS
+  // REST interface of the same BDL map server. Field names are matched loosely because the
+  // REST names may differ from the WMS aliases.
+  const BDL_REST = 'https://mapserver.bdl.lasy.gov.pl/ArcGIS/rest/services/WMS_BDL/MapServer/0/query';
+  const field = (a, re) => { const k = Object.keys(a || {}).find(k => re.test(k)); const v = k ? a[k] : ''; return v == null || v === 'Null' ? '' : String(v).trim(); };
+  const esriPolys = (g) => (g && g.rings ? [g.rings.map(r => r.map(([lon, lat]) => toPL(lon, lat)))] : []);
+  async function bdlRest(params) {
+    const q = new URLSearchParams(Object.assign({ outFields: '*', returnGeometry: 'true', outSR: '4326', f: 'json' }, params));
+    const r = await fetch(BDL_REST + '?' + q);
+    if (!r.ok) throw new Error('BDL HTTP ' + r.status);
+    const j = await r.json();
+    if (j.error) throw new Error('BDL: ' + (j.error.message || 'error'));
+    return (j.features || []).map(f => ({ a: f.attributes || {}, polys: esriPolys(f.geometry) }));
+  }
+  async function bdlPrivateArea(lon, lat, whole) {
+    const at = await bdlRest({ geometry: lon + ',' + lat, geometryType: 'esriGeometryPoint', inSR: '4326', spatialRel: 'esriSpatialRelIntersects' });
+    if (!at.length) return null;
+    const f = at[0], adr = field(f.a, /^adr|adres|adress/i);
+    const sp = field(f.a, /species_cd/i), age = field(f.a, /species_age|spec_age/i);
+    const desc = () => [sp, age ? T('{n} y', { n: age }) : ''].filter(Boolean).join(', ');
+    if (!whole || !adr) {
+      return { get label() { return T('Subcompartment {adr}', { adr: adr.replace(/\s+/g, '') }) + (desc() ? ' (' + desc() + ')' : ''); }, polys: f.polys };
+    }
+    const key = compartment(adr), d = 0.01;
+    const all = await bdlRest({ geometry: [lon - d * 1.6, lat - d, lon + d * 1.6, lat + d].join(','), geometryType: 'esriGeometryEnvelope', inSR: '4326', spatialRel: 'esriSpatialRelIntersects' });
+    const polys = all.filter(g => compartment(field(g.a, /^adr|adres|adress/i)) === key).flatMap(g => g.polys);
+    return { get label() { return T('Compartment {key}', { key }); }, polys: polys.length ? polys : f.polys };
+  }
+
+  ALS.core = { compute, bdlPrivateArea, loadChm, loadTrees, parcelByXY, parcelById, bdl, bdlPrivate, parseFile, parseWkt,
     toPL, toWGS, polyArea, bbox, treeVolume, rasterize, percentile, rings, contains, bdlArea, RDLP,
     H_FOREST, H_SHRUB, G_HA, CELL };
 })(typeof window !== 'undefined' ? window : globalThis);

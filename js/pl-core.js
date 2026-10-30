@@ -64,6 +64,9 @@
     const [dsm, dtm] = await Promise.all([getGrid('nmpt', bb), getGrid('nmt', bb)]);
     onStep && onStep(T('Computing canopy height…'));
     const chm = new Float32Array(dsm.w * dsm.h);
+    // a few numbers kept to tell bad data from bare land: share of cells where the surface
+    // lies below the terrain or on it, and both mean levels
+    const d = { n: 0, below: 0, flat: 0, s: 0, t: 0, resS: dsm.res, resT: dtm.res };
     for (let r = 0; r < dsm.h; r++) {
       const y = dsm.y0 - (r + 0.5) * dsm.res;
       for (let c = 0; c < dsm.w; c++) {
@@ -72,10 +75,13 @@
         const t = sample(dtm, dsm.x0 + (c + 0.5) * dsm.res, y);
         if (Number.isNaN(t)) { chm[r * dsm.w + c] = NaN; continue; }
         const h = s - t;
+        d.n++; d.s += s; d.t += t;
+        if (h < -1) d.below++; else if (h < 0.3) d.flat++;
         chm[r * dsm.w + c] = h < 0 ? 0 : h > 60 ? NaN : h;  // > 60 m: not a tree (data error)
       }
     }
-    return { x0: dsm.x0, y0: dsm.y0, res: dsm.res, w: dsm.w, h: dsm.h, chm };
+    const diag = d.n ? { below: d.below / d.n, flat: d.flat / d.n, dsm: d.s / d.n, dtm: d.t / d.n, resS: d.resS, resT: d.resT } : null;
+    return { x0: dsm.x0, y0: dsm.y0, res: dsm.res, w: dsm.w, h: dsm.h, chm, diag };
   }
 
   // --- tree tops: local maxima of the smoothed CHM, as in tools/03_drzewa.py ----------
@@ -144,7 +150,7 @@
     const rows = r1 - r0, cols = c1 - c0;
     const mask = core.rasterize(polys, g, r0, c0, rows, cols);
 
-    const out = { area_ha: core.polyArea(polys) / 1e4, data_ha: 0, forest_ha: 0, shrub_ha: 0 };
+    const out = { area_ha: core.polyArea(polys) / 1e4, data_ha: 0, forest_ha: 0, shrub_ha: 0, diag: g.diag };
     const H = new Float32Array(rows * cols).fill(NaN);
     let nData = 0, nForest = 0, nShrub = 0;
     for (let r = 0; r < rows; r++) {

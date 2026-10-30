@@ -1,0 +1,42 @@
+// Yield-table volume (Szymkiewicz) and top-height growth, ported from the silvaR R package
+// (Socha J., Hawryło P., Tymińska-Czabańska L., Woda M., Janiec P., GPL-3; functions v_tab()
+// and th_growth(), parameters params_v_tab.rds and params_site_index.rds, species groups
+// sp_groups.csv). Checked against the package tests: v_tab(100, 32, 'SO') = 520.87 m3/ha.
+(function (root) {
+  const ALS = (root.ALS = root.ALS || {});
+
+  // species code from BDL -> yield-table group, or "table group/height group" when they differ
+  const GROUP = {"ABI.AL.AU":"JD","ABI.AL.FA":"JD","ABI.AL.PE":"JD","ABI.AL.PY":"JD","ABI.FA":"JD","ABI.PI":"JD","ABI.SA.MA":"JD","ABI.SA.NE":"JD","ACE.NE.AU":"BK/KL","ACE.NE.AV":"BK/KL","ACE.NE.OD":"BK/KL","ACE.NE.VA":"BK/KL","ACE.PA.AT":"BK/KL","ACE.PL.CK":"BK/KL","ACE.PL.DR":"BK/KL","ACE.PL.FB":"BK/KL","ACE.PL.GL":"BK/KL","ACE.PL.LO":"BK/KL","ACE.PL.RE":"BK/KL","ACE.PL.SC":"BK/KL","ACE.PS.LE":"BK/KL","ACE.PS.PH":"BK/KL","ACE.PS.PU":"BK/KL","ACE.PS.SL":"BK/KL","ACE.PS.WO":"BK/KL","ACE.SA.LU":"BK/KL","ACE.SA.PY":"BK/KL","ACE.SA.WI":"BK/KL","AES.HI.BA":"OS/BRZ","AES.HI.PA":"OS/BRZ","AES.HI.PY":"OS/BRZ","AES.HI.UM":"OS/BRZ","AK":"DB/AK","ALN.IN.LA":"OL","ALN.IN.PE":"OL","BET.PE.DA":"BRZ","BET.PE.FA":"BRZ","BET.PE.OY":"BRZ","BET.PE.PU":"BRZ","BET.PE.YO":"BRZ","BK":"BK","BRZ":"BRZ","BRZ.C":"BRZ","BRZ.H":"BRZ","BRZ.M":"BRZ","BRZ.O":"BRZ","BRZ.P":"BRZ","BST":"BK/DB","CAR.BE.CO":"BK/DB","CAR.BE.FA":"BK/DB","CAR.BE.QU":"BK/GB","CIS":"JD","CYP.G":"JD","CYP.L":"JD","CZM":"BRZ","CZM.P":"BRZ","CZR":"BRZ","CZR.P":"BRZ","DB":"DB","DB.B":"DB","DB.BI":"DB","DB.BŁ":"DB","DB.BU":"DB","DB.C":"DB/DB.CZ","DB.D":"DB","DB.K":"DB","DB.O":"DB","DB.S":"DB","DB.SZ":"DB","DB.W":"DB","DG":"JD/DG","DG.S":"JD/DG","FAG.SI.AS":"BK","FAG.SI.AT":"BK","FAG.SI.CU":"BK","FAG.SI.FA":"BK","FAG.SI.PE":"BK","FAG.SI.RO":"BK","FAG.SI.ZL":"BK","FRA.EX.AP":"JS","FRA.EX.AU":"JS","FRA.EX.DI":"JS","FRA.EX.EL":"JS","FRA.EX.HP":"JS","FRA.EX.NA":"JS","FRA.EX.PE":"JS","FRA.PE.AU":"JS","FRA.PE.CR":"JS","FRA.PE.LA":"JS","FSI.PU.PE":"BK","GB":"BK/GB","GR":"BRZ","GR.O":"BRZ","GR.W":"BRZ","IWA":"OS","IWA.P":"OS","JB":"BRZ","JB.J":"BRZ","JB.K":"BRZ","JB.N":"BRZ","JB.P":"BRZ","JB.S":"BRZ","JD":"JD","JD.A":"JD","JD.AL":"JD","JD.B":"JD","JD.BA":"JD","JD.BK":"JD","JD.BO":"JD","JD.D":"JD","JD.F":"JD","JD.G":"JD","JD.GK":"JD","JD.GR":"JD","JD.H":"JD","JD.J":"JD","JD.JP":"JD","JD.K":"JD","JD.KS":"JD","JD.M":"JD","JD.MS":"JD","JD.N":"JD","JD.NI":"JD","JD.NO":"JD","JD.O":"JD","JD.P":"JD","JD.S":"JD","JD.SC":"JD","JD.SL":"JD","JD.SY":"JD","JD.SYB":"JD","JD.T":"JD","JD.V":"JD","JD.VI":"JD","JD.W":"JD","JD.WS":"JD","JD.WS.S":"JD","JKL":"BK/KL","JRZ":"BRZ","JRZ.B":"BRZ","JRZ.M":"BRZ","JRZ.P":"BRZ","JRZ.S":"BRZ","JS":"JS","JS.A":"JS","JS.M":"JS","JS.P":"JS","JW":"BK/KL","KL":"BK/KL","KL.C":"BK/KL","KL.G":"BK/KL","KL.N":"BK/KL","KL.O":"BK/KL","KL.P":"BK/KL","KL.PA":"BK/KL","KL.PE":"BK/KL","KL.SR":"BK/KL","KL.T":"BK/KL","KSZ":"BRZ","KSZ.C":"BRZ","KSZ.D":"BRZ","KSZ.G":"BRZ","KSZ.K":"BRZ","KSZ.Z":"BRZ","KT":"DB","LAR.EU.FA":"MD","LAR.EU.GL":"MD","LAR.EU.PE":"MD","LAR.GM.JA":"MD","LAR.GM.OL":"MD","LAR.GM.PR":"MD","LAR.LA.PE":"MD","LAR.LA.PY":"MD","LAR.PE.CO":"MD","LEU.EU.SU":"MD","LP":"BK/LP","LP.A":"BK/LP","LP.D":"BK/LP","LP.G":"BK/LP","LP.H":"BK/LP","LP.J":"BK/LP","LP.K":"BK/LP","LP.M":"BK/LP","LP.NO":"BK/LP","LP.S":"BK/LP","LP.SR":"BK/LP","LP.W":"BK/LP","MAL.PU.PA":"BRZ","MD":"MD","MD.A":"MD","MD.C":"MD","MD.CZ":"MD","MD.D":"MD","MD.E":"MD","MD.H":"MD","MD.J":"MD","MD.K":"MD","MD.M":"MD","MD.NO":"MD","MD.P":"MD","MD.S":"MD","MD.Z":"MD","MD.ZD":"MD","MOR.AL.PE":"BRZ","MW":"BRZ","OL":"OL","OL.S":"OL","OL.Z":"OL","ORZ.C":"BRZ","ORZ.S":"BRZ","ORZ.SE":"BRZ","ORZ.W":"BRZ","OS":"OS","OSZ.G":"OS/BRZ","OSZ.O":"OS/","OSZ.P":"OS/BRZ","OSZ.S":"OS/","PIC.AB.AG":"ŚW","PIC.AB.AR":"ŚW","PIC.AB.AU":"ŚW","PIC.AB.BA":"ŚW","PIC.AB.BI":"ŚW","PIC.AB.CA":"ŚW","PIC.AB.CI":"ŚW","PIC.AB.CL":"ŚW","PIC.AB.CM":"ŚW","PIC.AB.CO":"ŚW","PIC.AB.CU":"ŚW","PIC.AB.NI":"ŚW","PIC.AB.PA":"ŚW","PIC.AB.PE":"ŚW","PIC.AB.PR":"ŚW","PIC.AB.TU":"ŚW","PIC.AB.VI":"ŚW","PIN.RH.R":"SO","PLA.K":"BK","POP.AL.BO":"BRZ","POP.CA.MA":"BRZ","POP.CA.RO":"BRZ","POP.CA.SE":"BRZ","POP.NI.IT":"BRZ","POP.SI.FA":"BRZ","PRU.CE.RH":"BRZ","PRU.CE.UM":"BRZ","PRU.GL.AL":"BRZ","PRU.IN.IT":"BRZ","PRU.IN.SY":"BRZ","PRU.SE.A":"BRZ","PRU.SE.KA":"BRZ","PRU.SE.KR":"BRZ","PRU.SE.KS":"BRZ","PRU.SE.S":"BRZ","PSE.DO.AR":"JD/DG","PSE.DO.FA":"JD/DG","PSE.DO.GL":"JD/DG","QUE.PE.ME":"DB","QUE.RO.CO":"DB","QUE.RO.FA":"DB","QUE.RO.PC":"DB","QUE.RO.PE":"DB","ROB.AM.DE":"DB/AK","ROB.HI.MA":"DB/AK","ROB.L":"DB/AK","ROB.N":"DB/AK","ROB.NE.LU":"DB/AK","ROB.P":"DB/AK","ROB.PS.BE":"DB/AK","ROB.PS.RO":"DB/AK","ROB.PS.UM":"DB/AK","ROB.S":"DB/AK","SAL.AL.CH":"BRZ/OS","SAL.AL.SE":"BRZ/OS","SAL.AL.TR":"BRZ/OS","SAL.AL.VI":"BRZ/OS","SAL.EL.AN":"BRZ/OS","SAL.FR.BU":"BRZ/OS","SAL.LA":"BRZ/OS","SAL.MA.TO":"BRZ/OS","SO":"SO","SO.B":"SO","SO.BL":"SO","SO.C":"SO","SO.H":"SO","SO.J":"SO","SO.K":"SO","SO.L":"SO","SO.O":"SO","SO.S":"SO","SO.W":"SO","SO.WE":"SO","SO.Ż":"SO","SOR.AU.ED":"BRZ","SOR.AU.JA":"BRZ","SOR.AU.PE":"BRZ","ŚL":"BRZ","ŚL.A":"BRZ","ŚL.L":"BRZ","ŚW":"ŚW","ŚW.A":"ŚW","ŚW.B":"ŚW","ŚW.B.AG":"ŚW","ŚW.B.C":"ŚW","ŚW.BR":"ŚW","ŚW.C":"ŚW","ŚW.CZ":"ŚW","ŚW.D":"ŚW","ŚW.E":"ŚW","ŚW.H":"ŚW","ŚW.J":"ŚW","ŚW.K":"ŚW","ŚW.KB":"ŚW","ŚW.L":"ŚW","ŚW.S":"ŚW","ŚW.S.A.":"ŚW","ŚW.SE":"ŚW","ŚW.SI":"ŚW","ŚW.SR":"ŚW","ŚW.SY":"ŚW","TIL.AM.AM":"BK/LP","TIL.AM.FA":"BK/LP","TIL.AM.MA":"BK/LP","TIL.PL.LA":"BK/LP","TIL.PL.PA":"BK/LP","TIL.PL.RU":"BK/LP","TIL.PL.VI":"BK/LP","TP":"OS","TP.B":"OS","TP.C":"OS","TP.CH":"OS","TP.K":"OS","TP.KO":"OS","TP.M":"OS","TP.NO":"OS","TP.P":"OS","TP.S":"OS","TS.K":"JD","ULM.CA.DA":"BK/DB","ULM.CA.SU":"BK/DB","ULM.CA.UM":"BK/DB","ULM.CA.VR":"BK/DB","ULM.GL.CA":"BK/DB","ULM.GL.EX":"BK/DB","ULM.GL.PE":"BK/DB","ULM.PU.AR":"BK/DB","WB":"OS","WB.K":"OS","WB.L":"OS","WB.M":"OS","WB.NO":"OS","WB.O":"OS","WB.P":"OS","WB.RO":"OS","WB.S":"OS","WB.SL":"OS","WB.SZ.H":"OS","WB.TR":"OS","WB.W":"OS","WB.WI":"OS","WB.Z":"OS","WIS.G":"BRZ","WIS.P":"BRZ","WIS.W":"BRZ","WIŚ":"BRZ","WZ":"BK","WZ.NO":"BK","WZ.P":"BK","WZ.S":"BK","WZ.SY":"BK","WZW.Z":"BK/DB","ŻYW.O":"JD","ŻYW.W":"JD","ŻYW.Z":"JD"};
+  // v_tab(): n1, n2, b, c, a
+  const VT = {"BK":[21.621792,139.329807,-0.028835,266.196963,-0.650499],"BRZ":[20.749938,188.534477,-0.035117,37.004598,-0.464419],"DB":[24.258779,178.289654,-0.022586,1706.544065,-1.027085],"JD":[40.035973,268.783831,-0.031458,159979.9056,-1.533482],"JS":[21.229296,193.77624,-0.042812,31874.01962,-1.475743],"MD":[23.684999,277.58914,-0.023458,7281.574276,-1.350635],"OL":[41.657409,588.085767,-0.035476,23741.06038,-1.410138],"OS":[27.170002,281.82486,-0.022204,2.488036,-0.095734],"SO":[18.246054,63.007163,-0.039864,7346.450154,-1.27112],"ŚW":[31.876607,284.580269,-0.047916,4136.105105,-0.960745]};
+  // th_growth(): b1, b3, b2
+  const SI = {"BK":[1.611,20.2754,75431.678],"OL":[1.5354,30.6081,1186.0699],"MD":[1.3248,43.4248,653.0129],"BRZ":[1.6186,11.5414,14326.78],"DB":[1.6413,30.814,7012.034],"ŚW":[1.8131,41.5612,4978.229],"JD":[2.2177,35.9102,11362.6423],"SO":[1.3601,31.6767,5320.602],"JS":[1.7413,22.195,12493.3],"OS":[1.1133,-29.28,10587.6],"AK":[0.8794,-3.919,1646.5],"DG":[1.8481,44.685,0.7],"GB":[1.8658,15.616,74528.9],"DB.CZ":[1.9504,-0.96,44588.4],"LP":[1.2326,8.471,5314.9],"KL":[1.148,10.593,6307.0]};
+
+  function groups(code) {
+    const g = GROUP[String(code || '').trim().toUpperCase()];
+    if (!g) return null;
+    const [vt, th] = g.split('/');
+    return { vt, th: th || vt };
+  }
+
+  // top height at age t2 from top height h1 at age t1 (dynamic site index model)
+  function thGrowth(t1, t2, h1, th) {
+    const [b1, b3, b2] = SI[th];
+    const z = (h1 - b3) + Math.sqrt((h1 - b3) ** 2 + (2 * b2 * h1) / t1 ** b1);
+    return h1 * (t2 ** b1 * (t1 ** b1 * z + b2)) / (t1 ** b1 * (t2 ** b1 * z + b2));
+  }
+
+  // yield-table volume [m3/ha] of a fully stocked stand of this age and top height
+  function vTab(age, h, code) {
+    const g = groups(code);
+    if (!g || !VT[g.vt]) return NaN;
+    const [n1, n2, b, c, a] = VT[g.vt];
+    // as in silvaR, the height curve is looked up for the yield-table group
+    const th = (groups(g.vt) || g).th;
+    const k = n1 * thGrowth(age, 100, h, th) - n2;
+    if (!(k > 0)) return NaN;
+    return k * ((1 - Math.exp(b * age)) / (1 - Math.exp(b * 100))) ** (c * k ** a);
+  }
+
+  ALS.yield = { groups, thGrowth, vTab };
+})(typeof window !== 'undefined' ? window : globalThis);

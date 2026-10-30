@@ -13,7 +13,8 @@ A rough, honest estimate of how many cubic metres of timber stand on a forest in
    - A) sum over detected trees, DBH = 1.3·h − 2.5 cm, form factor 0.42 + 1/h (pine);
    - B) 28 m²/ha basal area × canopy closure × H95 × form factor, in 20 m cells.
 5. **The headline number** is the mean of A and B, rounded to two significant digits. The range shown covers both methods and at least ±25 % around their mean.
-6. **BDL.** Dominant species and stand age of the State Forests subcompartments inside the area. When more than 30 % of them are not pine, the page warns that the pine formulas may be well off.
+6. **C) Yield tables.** For every Forest Data Bank stand in the area (State Forests from the OGC API, non-state forests from the BDL map service): species and age from BDL, top height from the canopy height (silvaR `th_calc()` method on 10 m cells), volume from the Szymkiewicz yield tables via the silvaR models `v_tab()` and `th_growth()`, scaled by canopy cover, then grown from the scan year to today. Species without a table are listed, not guessed.
+7. **BDL.** Dominant species and stand age of the State Forests subcompartments inside the area. When more than 30 % of them are not pine, the page warns that the pine formulas may be well off.
 
 A live canopy height layer is drawn for the current map view anywhere in Poland (zoom 16+).
 
@@ -31,6 +32,14 @@ A live canopy height layer is drawn for the current map view anywhere in Poland 
 - The GUGiK WCS sends no CORS headers, so the elevation models go through a small Cloudflare Worker (`?m=nmt|nmpt&bbox=x0,y0,x1,y1` in EPSG:2180, max 1 km², cached for 7 days).
 - `js/core.js`: projections, parcels (ULDK), BDL, file import. `js/pl-core.js`: elevation download, canopy height, trees, volume. `js/i18n.js`: EN / PL / DE texts. `js/app.js`: the map and the panel.
 
+## Credits
+
+Yield-table and height-growth models ported from the R package **silvaR** (Socha J., Hawryło P., Tymińska-Czabańska L., Woda M., Janiec P.; GPL-3), `js/yield.js`.
+
 ## Data
 
 GUGiK (Geoportal: NMT, NMPT, orthophoto, cadastral parcels), State Forests – Forest Data Bank (BDL), OpenStreetMap.
+
+## Licence
+
+GPL-3 (see `LICENSE`), as required by the silvaR code ported in `js/yield.js`.

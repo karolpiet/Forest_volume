@@ -7,7 +7,7 @@
 
   // --- map and layers -----------------------------------------------------
   // start over a forest near Wierzchowiska, close enough to see the parcels
-  const map = L.map('map', { zoomControl: true, preferCanvas: true }).setView([51.1775, 21.507], 16);
+  const map = L.map('map', { zoomControl: true, preferCanvas: true }).fitBounds([[49.0, 14.1], [54.85, 24.15]]);
   map.createPane('lines').style.zIndex = 450;
   const osm = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',
     { maxZoom: 21, maxNativeZoom: 19, attribution: '&copy; OpenStreetMap contributors' });
@@ -453,6 +453,8 @@
     const b = s.bdl, sc = s.scan;
     if (!b || b.loading || !sc || sc.loading || !s.w.grid) return;
     if (b.error || !b.items.length) { s.yt = null; renderYield(); return; }
+    // without the scan year the age at the scan and the growth since are unknown
+    if (!sc.year) { s.yt = { noScan: true }; if (shown === s) renderYield(); return; }
     const Y = ALS.yield, now = new Date().getFullYear();
     const lp = b.items.map(p => p._polys ? core.rings(p._polys) : null);
     const pts = b.private ? b.items.flatMap((p, i) => (p._pts || []).map(q => [q[0], q[1], i])) : [];
@@ -469,8 +471,7 @@
       if (!st) return Object.assign(r, { skip: 'out' });
       if (!g) return Object.assign(r, { skip: 'species' });
       if (!(age > 0)) return Object.assign(r, { skip: 'age' });
-      // without the scan date the laser heights are taken as of the year of the description
-      const sy = sc.year || ay, ageScan = age + sy - ay, ageNow = age + now - ay;
+      const sy = sc.year, ageScan = age + sy - ay, ageNow = age + now - ay;
       if (ageScan < 10 || !(st.th >= 5)) return Object.assign(r, { skip: 'young' });
       const v0 = Y.vTab(ageScan, st.th, p.species_cd), hNow = Y.thGrowth(ageScan, ageNow, st.th, g.th);
       const v1 = Y.vTab(ageNow, hNow, p.species_cd);
@@ -488,13 +489,17 @@
     const box = $('yield'), today = $('today'), y = shown && shown.yt;
     if (!box || !today) return;
     if (!y) { box.innerHTML = ''; today.innerHTML = ''; return; }
+    if (y.noScan) {
+      today.innerHTML = '';
+      box.innerHTML = `<h3>${T('C) Yield tables by species')}</h3><div class="warn">${T('This method needs the year of the laser scan. Type it in the box above the result (Geoportal shows it).')}</div>`;
+      return;
+    }
     const why = { out: T('outside the area'), species: T('no yield table for this species'), age: T('no age in the description'), young: T('young stand (under 10 years or 5 m)') };
     const yr = y.rows.find(r => r.sy) ? y.rows.find(r => r.sy).sy : null;
     today.innerHTML = y.ok ? T('Today by yield tables: ≈ {v} m³', { v: `<b>${nice(y.m1)}</b>` }) +
       (y.share < 0.9 ? ' <small>' + T('(for the {p}% of the area described in BDL)', { p: fmt(y.share * 100) }) + '</small>' : '') : '';
     box.innerHTML = `<h3>${T('C) Yield tables by species')}</h3>
       <p class="note">${T('Species and age from the Forest Data Bank, top height from the laser data, volume from the Szymkiewicz yield tables (silvaR models), scaled by the canopy cover. Then grown to {now}.', { now: y.now })}</p>
-      ${y.scanKnown ? '' : `<div class="warn">${T('The scan date is unknown, so the laser heights are taken as of the year of the stand description.')}</div>`}
       <table><tr><td><b>${T('Stand · species · age')}</b></td><td><b>${T('m³ at scan → today')}</b></td></tr>` +
       y.rows.map(r => r.skip ? `<tr><td>${String(r.p.adr_for || '').replace(/\s+/g, ' ')} · ${r.sp}</td><td><small>${why[r.skip]}</small></td></tr>`
         : `<tr><td>${String(r.p.adr_for || '').replace(/\s+/g, ' ')} · ${r.sp}${r.vt !== r.sp.split('.')[0] ? ` <small>(${T('{t} table', { t: r.vt })})</small>` : ''} · ${T('{a}→{b} y', { a: r.ageScan, b: r.ageNow })}<br><small>${T('top height {h0}→{h1} m, {ha} ha', { h0: fmt(r.th, 1), h1: fmt(r.hNow, 1), ha: fmt(r.st.ha, 2) })}</small></td><td>${fmt(r.m0)} → ${fmt(r.m1)}</td></tr>`).join('') +
@@ -518,7 +523,20 @@
     const el = $('scan'), sc = shown && shown.scan;
     if (!el || !sc) return;
     if (sc.loading) { el.textContent = T('Checking when the laser scan was made…'); return; }
-    if (sc.unknown) { el.innerHTML = T('Laser scan date: unknown (2011–2023 depending on the region)'); return; }
+    if (sc.unknown) {
+      // the sheet index could not be read: the year shown on Geoportal can be typed in
+      el.innerHTML = T('Laser scan date: could not be read. Type the year from Geoportal:') +
+        ` <input id="scanYear" type="number" min="2006" max="${new Date().getFullYear()}" placeholder="2019" inputmode="numeric"> <button type="button" id="scanOk" class="small">OK</button>`;
+      const set = () => {
+        const v = +$('scanYear').value;
+        if (!(v >= 2006 && v <= new Date().getFullYear())) return;
+        shown.scan = { year: v, date: String(v), manual: true };
+        renderScan(); computeYield(shown);
+      };
+      $('scanOk').onclick = set;
+      $('scanYear').onkeydown = (e) => { if (e.key === 'Enter') set(); };
+      return;
+    }
     const age = new Date().getFullYear() - sc.year;
     el.innerHTML = T('Laser scan: {date}', { date: `<b>${sc.date.length > 4 ? new Date(sc.date).toLocaleDateString(ALS.locale(), { year: 'numeric', month: 'long' }) : sc.year}</b>` }) +
       (age > 0 ? ' · ' + T('the forest has grown for {n} more years since then', { n: age }) : '');

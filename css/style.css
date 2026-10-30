@@ -146,6 +146,7 @@ body.full .topbar,body.full #panel{display:none}
 .src li{margin-bottom:6px}
 .rc-scan{font-size:.82rem;opacity:.9;margin-top:8px;line-height:1.4;min-height:1.1em}
 .rc-scan b{color:#ffd58f}
+.rc-scan input{width:5.2em;padding:3px 6px;font:inherit;font-size:16px;border-radius:6px;border:1px solid #ffffff66;background:#fffdf8;color:var(--text)}
 .rc-today{font-size:.92rem;margin-top:6px;line-height:1.4}
 .rc-today:empty{display:none}
 .rc-today b{font-family:var(--display);font-size:1.15rem;color:#ffd58f}

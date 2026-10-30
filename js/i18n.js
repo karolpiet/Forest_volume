@@ -93,7 +93,6 @@
       'Ile lasu, ile drzew i ile drewna na dowolnej działce w Polsce, policzone z lotniczego skaningu laserowego.',
     'Type a parcel ID, or zoom in and click a parcel, a State Forests subcompartment or compartment, or draw your own shape. The canopy height is computed in your browser from the national surface and terrain models (GUGiK NMPT 0.5 m − NMT 1 m).':
       'Wpisz numer działki albo przybliż mapę i kliknij działkę, wydzielenie lub oddział Lasów Państwowych, możesz też narysować własny kształt. Wysokość drzew liczy się w Twojej przeglądarce z krajowych modeli pokrycia i terenu (GUGiK NMPT 0,5 m − NMT 1 m).',
-    'Parcel ID, e.g. 140905_5.0031.129/6': 'Nr działki, np. 140905_5.0031.129/6',
     'Find': 'Szukaj',
     'What do you want to select on the map?': 'Co chcesz zaznaczyć na mapie?',
     'Cadastral parcel': 'Działka ewidencyjna',
@@ -103,7 +102,7 @@
     'Upload KML / GPX / GeoJSON': 'Wczytaj KML / GPX / GeoJSON',
     'How it works': 'Jak to działa',
     'Hide or show the panel': 'Ukryj lub pokaż panel',
-    'Zoom in and click a parcel, or try {ex}.': 'Przybliż mapę i kliknij działkę albo sprawdź przykład {ex}.',
+    'Zoom in and click a parcel.': 'Przybliż mapę i kliknij działkę.',
     'Click inside a State Forests subcompartment (the BDL layer shows them).': 'Kliknij w wydzielenie Lasów Państwowych (pokazuje je warstwa BDL).',
     'Click inside a State Forests compartment: all its subcompartments are taken together.': 'Kliknij w oddział Lasów Państwowych: zostaną policzone wszystkie jego wydzielenia razem.',
     'Click to add corners, double-click (or click the first corner) to finish. {undo}': 'Klikaj, aby dodać narożniki, zakończ podwójnym kliknięciem (albo klikając pierwszy narożnik). {undo}',
@@ -269,7 +268,6 @@
       'Wie viel Wald, wie viele Bäume und wie viel Holz auf jedem Flurstück in Polen, berechnet aus luftgestütztem Laserscanning.',
     'Type a parcel ID, or zoom in and click a parcel, a State Forests subcompartment or compartment, or draw your own shape. The canopy height is computed in your browser from the national surface and terrain models (GUGiK NMPT 0.5 m − NMT 1 m).':
       'Geben Sie eine Flurstücksnummer ein oder zoomen Sie hinein und klicken Sie auf ein Flurstück, eine Unterabteilung oder Abteilung der Staatsforsten, oder zeichnen Sie eine eigene Fläche. Die Baumhöhe wird in Ihrem Browser aus den nationalen Oberflächen- und Geländemodellen berechnet (GUGiK NMPT 0,5 m − NMT 1 m).',
-    'Parcel ID, e.g. 140905_5.0031.129/6': 'Flurstücks-ID, z. B. 140905_5.0031.129/6',
     'Find': 'Suchen',
     'What do you want to select on the map?': 'Was möchten Sie auf der Karte auswählen?',
     'Cadastral parcel': 'Katasterflurstück',
@@ -279,7 +277,7 @@
     'Upload KML / GPX / GeoJSON': 'KML / GPX / GeoJSON laden',
     'How it works': 'So funktioniert es',
     'Hide or show the panel': 'Bereich ein- oder ausblenden',
-    'Zoom in and click a parcel, or try {ex}.': 'Zoomen Sie hinein und klicken Sie auf ein Flurstück, oder probieren Sie {ex}.',
+    'Zoom in and click a parcel.': 'Zoomen Sie hinein und klicken Sie auf ein Flurstück.',
     'Click inside a State Forests subcompartment (the BDL layer shows them).': 'Klicken Sie in eine Unterabteilung der Staatsforsten (die BDL-Ebene zeigt sie).',
     'Click inside a State Forests compartment: all its subcompartments are taken together.': 'Klicken Sie in eine Abteilung der Staatsforsten: alle ihre Unterabteilungen werden zusammen berechnet.',
     'Click to add corners, double-click (or click the first corner) to finish. {undo}': 'Klicken Sie, um Eckpunkte zu setzen; Doppelklick (oder Klick auf den ersten Punkt) beendet die Fläche. {undo}',

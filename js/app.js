@@ -3,7 +3,6 @@
   const $ = (id) => document.getElementById(id);
   const fmt = (v, d = 0) => Number(v).toLocaleString(ALS.locale(), { minimumFractionDigits: d, maximumFractionDigits: d });
   const ll = (x, y) => { const [lon, lat] = core.toWGS(x, y); return [lat, lon]; };
-  const EXAMPLE = '140905_5.0031.129/6';
 
   // --- map and layers -----------------------------------------------------
   // start over a forest near Wierzchowiska, close enough to see the parcels
@@ -22,9 +21,29 @@
   const kieg = L.tileLayer.wms('https://integracja.gugik.gov.pl/cgi-bin/KrajowaIntegracjaEwidencjiGruntow',
     { layers: 'geoportal,dzialki,numery_dzialek', format: 'image/png', transparent: true, minZoom: 16, maxZoom: 21,
       pane: 'lines', attribution: 'Parcels &copy; GUGiK (KIEG)' });
-  const bdlWms = L.tileLayer.wms('https://mapserver.bdl.lasy.gov.pl/ArcGIS/services/WMS_BDL/mapserver/WMSServer',
-    { layers: '0,1,2,3', format: 'image/png', transparent: true, version: '1.3.0', minZoom: 13, maxZoom: 21,
-      pane: 'lines', attribution: 'Forest Data Bank &copy; BDL' });
+  // the BDL map is asked for as one picture of the whole view, not in tiles: the server
+  // labels every polygon in each picture it draws, so tiles repeated the same address
+  // in every tile it touched
+  const BdlWms = L.Layer.extend({
+    options: { pane: 'lines', attribution: 'Forest Data Bank &copy; BDL', minZoom: 13 },
+    onAdd(m) { this._m = m; m.on('moveend', this._update, this); this._update(); },
+    onRemove(m) { m.off('moveend', this._update, this); for (const l of [this._img, this._old]) if (l) m.removeLayer(l); this._img = this._old = null; },
+    _update() {
+      const m = this._m;
+      if (m.getZoom() < this.options.minZoom) { if (this._img) { m.removeLayer(this._img); this._img = null; } return; }
+      const b = m.getBounds(), size = m.getSize();
+      const sw = L.CRS.EPSG3857.project(b.getSouthWest()), ne = L.CRS.EPSG3857.project(b.getNorthEast());
+      const url = 'https://mapserver.bdl.lasy.gov.pl/ArcGIS/services/WMS_BDL/mapserver/WMSServer?SERVICE=WMS&REQUEST=GetMap' +
+        '&VERSION=1.3.0&LAYERS=0,1,2,3&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857' +
+        `&BBOX=${sw.x},${sw.y},${ne.x},${ne.y}&WIDTH=${size.x}&HEIGHT=${size.y}`;
+      // the old picture stays until the new one has loaded, so the map does not flicker
+      const img = L.imageOverlay(url, b, { pane: this.options.pane, attribution: this.options.attribution });
+      img.once('load', () => { if (this._img !== img) return; if (this._old) m.removeLayer(this._old); this._old = null; });
+      if (this._old) m.removeLayer(this._old);
+      this._old = this._img; this._img = img; img.addTo(m);
+    },
+  });
+  const bdlWms = new BdlWms();
   const chmLayer = L.layerGroup(), trees = L.layerGroup(), liveChm = L.layerGroup();
   orto.addTo(map); kieg.addTo(map); chmLayer.addTo(map); liveChm.addTo(map);
 
@@ -108,7 +127,7 @@
   let shown = null, areaLabel = null;  // what the result panel shows, so it can be redrawn in another language
   const status = (msg, cls = 'info') => { const s = $('status'); s.className = msg ? cls : ''; s.innerHTML = msg || ''; };
   const HINTS = {
-    pick: () => T('Zoom in and click a parcel, or try {ex}.', { ex: `<a href="#" id="example">${EXAMPLE}</a>` }),
+    pick: () => T('Zoom in and click a parcel.'),
     wyd: () => T('Click inside a State Forests subcompartment (the BDL layer shows them).'),
     odd: () => T('Click inside a State Forests compartment: all its subcompartments are taken together.'),
     draw: () => T('Click to add corners, double-click (or click the first corner) to finish. {undo}',
@@ -121,7 +140,6 @@
       // a double tap is awkward on a phone, so the shape can also be closed with a button
       $('finish').onclick = () => { if (drawPts.length >= 3) finishDraw(); };
     }
-    if (mode === 'pick') $('example').onclick = showExample;
   }
   function setMode(m) {
     mode = m;
@@ -164,7 +182,6 @@
     <li>${T('The page downloads the national laser scanning models from Geoportal and measures the height of every tree.')}</li>
     <li>${T('You get an approximate volume of timber in cubic metres, with an honest range.')}</li></ol></div>`;
   function showIntro() { shown = { intro: true }; $('result').innerHTML = intro(); setNav('navCalc'); }
-  function showExample(e) { e.preventDefault(); $('q').value = EXAMPLE; $('search').requestSubmit(); }
   $('toggle').onclick = () => { $('panel').classList.toggle('min'); $('toggle').textContent = $('panel').classList.contains('min') ? '▴' : '▾'; setTimeout(() => map.invalidateSize(), 50); };
   document.querySelectorAll('.lang-btn').forEach(b => { b.onclick = () => ALS.setLang(b.dataset.lang); });
 
@@ -247,7 +264,7 @@
       } catch (err) { status(T('The BDL service did not answer: {msg}', { msg: err.message }), 'err'); }
       return;
     }
-    // a parcel ID has digits and a dot or a slash (140905_5.0031.129/6); anything else is a place name
+    // a parcel ID has digits and a dot or a slash (TERYT_obreb.arkusz.numer, e.g. 123456_7.0001.12/3); anything else is a place name
     if (/\d/.test(q) && /[._/]/.test(q)) {
       status(T('Looking up the parcel in the GUGiK register…'));
       try { showParcels(await core.parcelById(q)); } catch (err) { status(err.message, 'err'); }

@@ -369,9 +369,14 @@
         `<div id="bdl"></div>`;
       return;
     }
-    const A = w.vol_trees, B = w.vol_canopy, mid = (A + B) / 2;
+    const A = w.vol_trees, B = w.vol_canopy, ab = (A + B) / 2;
+    // with species and age from the BDL the yield tables (C) give the headline; the pine
+    // formulas A and B then only fill the part of the area that has no stand description
+    const yt = shown.yt, useC = !!(yt && yt.ok && yt.share >= 0.5);
+    const mid = useC ? yt.m1 + Math.max(0, 1 - yt.share) * ab : ab;
     // the range covers both methods and at least ±25% around their mean
-    const lo = Math.min(A, B, 0.75 * mid), hi = Math.max(A, B, 1.25 * mid);
+    const lo = useC ? 0.75 * mid : Math.min(A, B, 0.75 * mid), hi = useC ? 1.25 * mid : Math.max(A, B, 1.25 * mid);
+    const spList = useC ? [...new Set(yt.rows.filter(r => r.m1 > 0).map(r => r.sp))].join(', ') : '';
     const per = (v) => w.forest_ha > 0 ? ` <small>(${fmt(v / w.forest_ha)} m³/ha)</small>` : '';
     const cover = w.data_ha / w.area_ha;
     const p = (q) => w.heights[Math.min(w.heights.length - 1, Math.floor(q * (w.heights.length - 1)))];
@@ -382,12 +387,14 @@
         <div class="rc-label">${T('Timber in this forest (approx.)')}</div>
         <div class="rc-value">≈ ${nice(mid)}<small>m³</small></div>
         <div class="rc-range">${T('most likely between {lo} and {hi} m³', { lo: `<b>${nice(lo)}</b>`, hi: `<b>${nice(hi)}</b>` })}</div>
+        <div class="rc-basis">${useC ? T('Today, from the yield tables for {sp} (species and age from the BDL). Pine formulas A/B: {a}–{b} m³.', { sp: spList, a: nice(Math.min(A, B)), b: nice(Math.max(A, B)) })
+          : T('From the pine formulas A and B.')}</div>
         <div class="gauge" aria-hidden="true">
           <div class="track"></div>
           <div class="band" style="left:${pos(lo)};width:${(100 * (hi - lo) / scale).toFixed(1)}%"></div>
           <div class="mid" style="left:${pos(mid)}"></div>
-          <span class="m" style="left:${pos(A)}" title="${T('A) sum of detected trees')}">A</span>
-          <span class="m b" style="left:${pos(B)}" title="${esc(T('B) from canopy height & closure'))}">B</span>
+          ${useC ? '' : `<span class="m" style="left:${pos(A)}" title="${T('A) sum of detected trees')}">A</span>
+          <span class="m b" style="left:${pos(B)}" title="${esc(T('B) from canopy height & closure'))}">B</span>`}
         </div>
         <div class="rc-scan" id="scan"></div>
         <div class="rc-today" id="today"></div>
@@ -418,7 +425,7 @@
         <tr><td>${T('Estimated mean DBH')}</td><td>${fmt(w.dbh_mean)} cm</td></tr>` : ''}
       </table>
       ${histogram(w.heights)}
-      <h3>${T('Two ways of counting')}</h3>
+      <h3>${useC ? T('For comparison: pine formulas') : T('Two ways of counting')}</h3>
       <table>
         <tr><td>${T('A) sum of detected trees')}</td><td>${fmt(A)} m³${per(A)}</td></tr>
         <tr><td>${esc(T('B) from canopy height & closure'))}</td><td>${fmt(B)} m³${per(B)}</td></tr>
@@ -454,8 +461,11 @@
     const other = {};
     (b.items || []).filter(p => p.species_cd && !/^SO/i.test(p.species_cd)).forEach(p => { other[p.species_cd] = (other[p.species_cd] || 0) + p._ha; });
     const share = all > 0 ? Object.values(other).reduce((a, v) => a + v, 0) / all : 0;
+    const yt = shown.yt;
+    if (yt && yt.ok && yt.share >= 0.5) { sp.innerHTML = ''; return; }  // the headline already uses the species
     sp.innerHTML = share > 0.3 ? `<div class="warn">${T('According to the Forest Data Bank, {p}% of the stands here are dominated by species other than pine ({sp}). The pine formulas can be well off for them.',
-      { p: fmt(share * 100), sp: Object.keys(other).sort((x, y) => other[y] - other[x]).slice(0, 4).join(', ') })}</div>` : '';
+      { p: fmt(share * 100), sp: Object.keys(other).sort((x, y) => other[y] - other[x]).slice(0, 4).join(', ') })}` +
+      (shown.scan && shown.scan.unknown ? ' <b>' + T('Type the scan year above and the result will be computed from the yield tables for these species.') + '</b>' : '') + '</div>' : '';
   }
 
   // --- C) yield tables: species and age from BDL, top height from the laser data ----------
@@ -499,7 +509,7 @@
     const ha = ok.reduce((a, r) => a + r.st.ha, 0);
     s.yt = { rows, ok: ok.length, ha, share: s.w.data_ha > 0 ? ha / s.w.data_ha : 0,
       m0: ok.reduce((a, r) => a + r.m0, 0), m1: ok.reduce((a, r) => a + r.m1, 0), now, scanKnown: !!sc.year };
-    if (shown === s) renderYield();
+    if (shown === s) render();
   }
 
   function renderYield() {
@@ -513,7 +523,7 @@
     }
     const why = { out: T('outside the area'), species: T('no yield table for this species'), age: T('no age in the description'), young: T('young stand (under 10 years or 5 m)') };
     const yr = y.rows.find(r => r.sy) ? y.rows.find(r => r.sy).sy : null;
-    today.innerHTML = y.ok ? T('Today by yield tables: ≈ {v} m³', { v: `<b>${nice(y.m1)}</b>` }) +
+    today.innerHTML = y.ok && !(y.share >= 0.5) ? T('Today by yield tables: ≈ {v} m³', { v: `<b>${nice(y.m1)}</b>` }) +
       (y.share < 0.9 ? ' <small>' + T('(for the {p}% of the area described in BDL)', { p: fmt(y.share * 100) }) + '</small>' : '') : '';
     box.innerHTML = `<h3>${T('C) Yield tables by species')}</h3>
       <p class="note">${T('Species and age from the Forest Data Bank, top height from the laser data, volume from the Szymkiewicz yield tables (silvaR models), scaled by the canopy cover. Then grown to {now}.', { now: y.now })}</p>

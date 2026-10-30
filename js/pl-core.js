@@ -255,9 +255,15 @@
     'https://mapy.geoportal.gov.pl/wss/service/PZGIK/NumerycznyModelPokryciaTerenuEVRF2007/WFS/Skorowidze',
     'https://mapy.geoportal.gov.pl/wss/service/PZGIK/NumerycznyModelPokryciaTerenuKRON86/WFS/Skorowidze',
   ];
+  // the browser may be refused by Geoportal (no CORS headers); then the same request goes
+  // through the Cloudflare Worker, if it passes such requests on (parameter "url")
+  async function wfsGet(u) {
+    try { const r = await fetch(u); if (r.ok) return r; } catch (e) { /* blocked: try the proxy */ }
+    return fetch(ALS.PROXY + '?url=' + encodeURIComponent(u));
+  }
   async function layersOf(url) {
     try {
-      const r = await fetch(url + '?SERVICE=WFS&REQUEST=GetCapabilities&VERSION=2.0.0');
+      const r = await wfsGet(url + '?SERVICE=WFS&REQUEST=GetCapabilities&VERSION=2.0.0');
       const names = (await r.text()).match(/gugik:Skorowidz\w*/g) || [];
       return [...new Set(names)];
     } catch (e) { return []; }
@@ -276,7 +282,7 @@
       const layers = await layersOf(url);
       await Promise.all(layers.flatMap(ly => bbs.map(async (bb) => {
         try {
-          const r = await fetch(url + '?SERVICE=WFS&REQUEST=GetFeature&VERSION=2.0.0&TYPENAMES=' + ly + '&COUNT=50&BBOX=' + encodeURIComponent(bb));
+          const r = await wfsGet(url + '?SERVICE=WFS&REQUEST=GetFeature&VERSION=2.0.0&TYPENAMES=' + ly + '&COUNT=50&BBOX=' + encodeURIComponent(bb));
           if (!r.ok) return;
           const xml = await r.text();
           const re = /<(?:\w+:)?(\w*(?:aktualnosc|data|Data|Aktualnosc)\w*)>\s*([^<]{4,30})\s*<\//g;

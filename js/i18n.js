@@ -4,6 +4,10 @@
   const ALS = (root.ALS = root.ALS || {});
 
   const PL = {
+  "Today, from the yield tables for {sp} (species and age from the BDL). Pine formulas A/B: {a}–{b} m³.": "Na dziś, z tablic zasobności dla: {sp} (gatunek i wiek z BDL). Wzory dla sosny A/B: {a}–{b} m³.",
+  "From the pine formulas A and B.": "Ze wzorów dla sosny (A i B).",
+  "For comparison: pine formulas": "Dla porównania: wzory dla sosny",
+  "Type the scan year above and the result will be computed from the yield tables for these species.": "Wpisz rok skanu powyżej, a wynik policzę z tablic zasobności dla tych gatunków.",
   "No forest subcompartment from the BDL at this point. Click inside the forest, or pick the parcel.": "W tym miejscu BDL nie zwrócił żadnego wydzielenia. Kliknij w środku lasu albo wybierz działkę.",
   "No tree heights in the laser data for this place.": "Dla tego miejsca nie dostałem wysokości drzew z lidaru.",
   "The surface model (NMPT) that Geoportal returned here lies on the ground, so the trees cannot be measured. This is a gap or error in the data for this place, not a result of 0 m³.": "Model pokrycia terenu (NMPT), który przyszedł z Geoportalu, leży tu na ziemi, więc drzew nie da się zmierzyć. To błąd w pobranych danych, a nie wynik 0 m³.",
@@ -169,6 +173,10 @@
   };
 
   const DE = {
+  "Today, from the yield tables for {sp} (species and age from the BDL). Pine formulas A/B: {a}–{b} m³.": "Heute, aus den Ertragstafeln für {sp} (Baumart und Alter aus der BDL). Kiefernformeln A/B: {a}–{b} m³.",
+  "From the pine formulas A and B.": "Aus den Kiefernformeln A und B.",
+  "For comparison: pine formulas": "Zum Vergleich: Kiefernformeln",
+  "Type the scan year above and the result will be computed from the yield tables for these species.": "Tragen Sie oben das Scanjahr ein, dann wird mit den Ertragstafeln dieser Baumarten gerechnet.",
   "No forest subcompartment from the BDL at this point. Click inside the forest, or pick the parcel.": "Die BDL liefert an dieser Stelle keine Unterabteilung. Klicken Sie in den Wald oder wählen Sie das Flurstück.",
   "No tree heights in the laser data for this place.": "Für diesen Ort kamen keine Baumhöhen aus den Laserdaten.",
   "The surface model (NMPT) that Geoportal returned here lies on the ground, so the trees cannot be measured. This is a gap or error in the data for this place, not a result of 0 m³.": "Das Oberflächenmodell (NMPT) aus dem Geoportal liegt hier auf dem Boden, daher lassen sich die Bäume nicht messen. Das ist ein Fehler in den geladenen Daten, kein Ergebnis von 0 m³.",

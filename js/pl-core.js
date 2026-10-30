@@ -12,8 +12,8 @@
   const MARGIN = 3;      // metres around the area, so tree tops on the edge can be found
 
   // --- fetching the elevation models ------------------------------------------------
-  async function getGrid(model, bb) {
-    const url = ALS.PROXY + '?m=' + model + '&bbox=' + bb.join(',');
+  async function getGrid(model, bb, v) {
+    const url = ALS.PROXY + '?m=' + model + '&bbox=' + bb.join(',') + (v ? '&v=' + v : '');
     let r;
     try { r = await fetch(url); } catch (e) {
       throw new Error(T('The elevation data service did not respond. Try again in a moment.'));
@@ -63,10 +63,24 @@
     onStep && onStep(T('Downloading the surface and terrain models from Geoportal…'));
     const [dsm, dtm] = await Promise.all([getGrid('nmpt', bb), getGrid('nmt', bb)]);
     onStep && onStep(T('Computing canopy height…'));
+    let g = canopy(dsm, dtm);
+    // in some regions the KRON86 surface model shows no vegetation; the newer EVRF2007
+    // models then usually do, so they are tried and the one that sees trees is kept
+    if (g.diag && g.diag.tall < 0.01) {
+      try {
+        const [d2, t2] = await Promise.all([getGrid('nmpt', bb, 'evrf'), getGrid('nmt', bb, 'evrf')]);
+        const g2 = canopy(d2, t2);
+        if (g2.diag && g2.diag.tall > g.diag.tall) g = g2;
+      } catch (e) { /* the proxy or the service does not offer EVRF2007 here */ }
+    }
+    return g;
+  }
+
+  function canopy(dsm, dtm) {
     const chm = new Float32Array(dsm.w * dsm.h);
     // a few numbers kept to tell bad data from bare land: share of cells where the surface
     // lies below the terrain or on it, and both mean levels
-    const d = { n: 0, below: 0, flat: 0, s: 0, t: 0, resS: dsm.res, resT: dtm.res };
+    const d = { n: 0, below: 0, flat: 0, tall: 0, s: 0, t: 0, resS: dsm.res, resT: dtm.res };
     for (let r = 0; r < dsm.h; r++) {
       const y = dsm.y0 - (r + 0.5) * dsm.res;
       for (let c = 0; c < dsm.w; c++) {
@@ -76,11 +90,11 @@
         if (Number.isNaN(t)) { chm[r * dsm.w + c] = NaN; continue; }
         const h = s - t;
         d.n++; d.s += s; d.t += t;
-        if (h < -1) d.below++; else if (h < 0.3) d.flat++;
+        if (h < -1) d.below++; else if (h < 0.3) d.flat++; else if (h >= 2) d.tall++;
         chm[r * dsm.w + c] = h < 0 ? 0 : h > 60 ? NaN : h;  // > 60 m: not a tree (data error)
       }
     }
-    const diag = d.n ? { below: d.below / d.n, flat: d.flat / d.n, dsm: d.s / d.n, dtm: d.t / d.n, resS: d.resS, resT: d.resT } : null;
+    const diag = d.n ? { below: d.below / d.n, flat: d.flat / d.n, tall: d.tall / d.n, dsm: d.s / d.n, dtm: d.t / d.n, resS: d.resS, resT: d.resT } : null;
     return { x0: dsm.x0, y0: dsm.y0, res: dsm.res, w: dsm.w, h: dsm.h, chm, diag };
   }
 

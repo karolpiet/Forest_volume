@@ -252,7 +252,7 @@
   async function layersOf(url) {
     try {
       const r = await fetch(url + '?SERVICE=WFS&REQUEST=GetCapabilities&VERSION=2.0.0');
-      const names = (await r.text()).match(/gugik:SkorowidzNMPT\w*/g) || [];
+      const names = (await r.text()).match(/gugik:Skorowidz\w*/g) || [];
       return [...new Set(names)];
     } catch (e) { return []; }
   }
@@ -260,11 +260,15 @@
     const [x0, y0, x1, y1] = core.bbox(polys);
     const a = core.toWGS(x0, y0), b = core.toWGS(x1, y1);
     // EPSG:4326 in WFS 2.0 is latitude first
-    const bb = [a[1], a[0], b[1], b[0]].map(v => v.toFixed(6)).join(',') + ',urn:ogc:def:crs:EPSG::4326';
+    // the axis order of the BBOX is easy to get wrong on this server, so every reading is
+    // tried; the ones that miss Poland simply return no sheets
+    const bbs = [[a[1], a[0], b[1], b[0]].map(v => v.toFixed(6)).join(',') + ',urn:ogc:def:crs:EPSG::4326',
+      [y0, x0, y1, x1].map(v => v.toFixed(1)).join(',') + ',urn:ogc:def:crs:EPSG::2180',
+      [x0, y0, x1, y1].map(v => v.toFixed(1)).join(',') + ',EPSG:2180'];
     const found = [];
     await Promise.all(WFS.map(async (url) => {
       const layers = await layersOf(url);
-      await Promise.all(layers.map(async (ly) => {
+      await Promise.all(layers.flatMap(ly => bbs.map(async (bb) => {
         try {
           const r = await fetch(url + '?SERVICE=WFS&REQUEST=GetFeature&VERSION=2.0.0&TYPENAMES=' + ly + '&COUNT=50&BBOX=' + encodeURIComponent(bb));
           if (!r.ok) return;
@@ -276,7 +280,7 @@
             if (d && +d[0].slice(0, 4) >= 2000) found.push(d[0]);
           }
         } catch (e) { /* this index layer did not answer */ }
-      }));
+      })));
     }));
     if (!found.length) return null;
     found.sort();

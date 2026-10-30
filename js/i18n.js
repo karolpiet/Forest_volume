@@ -4,6 +4,8 @@
   const ALS = (root.ALS = root.ALS || {});
 
   const PL = {
+  "Laser scan date: could not be read. Type the year from Geoportal:": "Nie udało się odczytać daty skaningu. Wpisz rok z Geoportalu:",
+  "This method needs the year of the laser scan. Type it in the box above the result (Geoportal shows it).": "Ta metoda potrzebuje roku skaningu laserowego. Wpisz go w polu nad wynikiem (Geoportal go pokazuje).",
   "Full-screen map": "Mapa na cały ekran",
   "Back to the panel": "Wróć do panelu",
     "Finish the shape": "Zakończ kształt",
@@ -165,6 +167,8 @@
   };
 
   const DE = {
+  "Laser scan date: could not be read. Type the year from Geoportal:": "Das Scandatum konnte nicht gelesen werden. Jahr aus dem Geoportal eingeben:",
+  "This method needs the year of the laser scan. Type it in the box above the result (Geoportal shows it).": "Diese Methode braucht das Jahr des Laserscans. Tragen Sie es oben im Ergebnis ein (das Geoportal zeigt es).",
   "Full-screen map": "Karte im Vollbild",
   "Back to the panel": "Zurück zum Panel",
     "Finish the shape": "Form abschließen",

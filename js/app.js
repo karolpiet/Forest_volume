@@ -76,12 +76,32 @@
   zoomHint.addTo(map);
   function updateZoomHint() {
     const el = zoomHint.getContainer();
-    el.style.display = map.hasLayer(kieg) && map.getZoom() < 18 ? '' : 'none';
+    // on a phone the second, longer note would cover the map, so only the short one is shown there
+    const small = window.innerWidth < 760;
+    el.style.display = map.hasLayer(kieg) && map.getZoom() < (small ? 16 : 18) ? '' : 'none';
     el.textContent = map.getZoom() < 16 ? T('Zoom in to see parcel boundaries')
       : T('Some counties show parcels only when zoomed in further');
   }
   map.on('zoomend overlayadd overlayremove', updateZoomHint);
   updateZoomHint();
+
+  // full-screen map: hides the top bar and the panel, the same button brings them back
+  const full = L.control({ position: 'topright' });
+  full.onAdd = () => {
+    const b = L.DomUtil.create('button', 'fullbtn');
+    b.type = 'button';
+    b.textContent = '⛶';
+    b.title = T('Full-screen map');
+    L.DomEvent.disableClickPropagation(b);
+    b.onclick = () => {
+      const on = document.body.classList.toggle('full');
+      b.textContent = on ? '✕' : '⛶';
+      b.title = on ? T('Back to the panel') : T('Full-screen map');
+      setTimeout(() => map.invalidateSize(), 50);
+    };
+    return b;
+  };
+  full.addTo(map);
 
   // --- UI state -------------------------------------------------------------
   let mode = 'pick', drawPts = [], drawLine = null, areaLayer = null, areaLine = null, bdlLayer = null, busy = false;
@@ -92,11 +112,15 @@
     wyd: () => T('Click inside a State Forests subcompartment (the BDL layer shows them).'),
     odd: () => T('Click inside a State Forests compartment: all its subcompartments are taken together.'),
     draw: () => T('Click to add corners, double-click (or click the first corner) to finish. {undo}',
-      { undo: `<a href="#" id="undo">${T('Undo last point')}</a>` }),
+      { undo: `<a href="#" id="undo">${T('Undo last point')}</a>` }) + ` <button type="button" id="finish" class="primary small">${T('Finish the shape')}</button>`,
   };
   function showHint() {
     $('hint').innerHTML = HINTS[mode]();
-    if (mode === 'draw') $('undo').onclick = (e) => { e.preventDefault(); drawPts.pop(); redrawLine(); };
+    if (mode === 'draw') {
+      $('undo').onclick = (e) => { e.preventDefault(); drawPts.pop(); redrawLine(); };
+      // a double tap is awkward on a phone, so the shape can also be closed with a button
+      $('finish').onclick = () => { if (drawPts.length >= 3) finishDraw(); };
+    }
     if (mode === 'pick') $('example').onclick = showExample;
   }
   function setMode(m) {
@@ -152,7 +176,7 @@
   map.on('click', async (e) => {
     if (busy) return;
     if (mode === 'draw') {
-      if (drawPts.length >= 3 && map.latLngToContainerPoint(drawPts[0]).distanceTo(e.containerPoint) < 12) return finishDraw();
+      if (drawPts.length >= 3 && map.latLngToContainerPoint(drawPts[0]).distanceTo(e.containerPoint) < (L.Browser.touch ? 24 : 12)) return finishDraw();
       drawPts.push(e.latlng); redrawLine(); return;
     }
     if (map.getZoom() < 14) { status(T('Zoom in closer to pick an area.')); return; }
@@ -169,7 +193,8 @@
     status(T('Looking up the parcel in the GUGiK register…'));
     try { showParcels(await core.parcelByXY(x, y)); } catch (err) { status(err.message, 'err'); }
   });
-  map.on('dblclick', () => { if (mode === 'draw' && drawPts.length >= 3) finishDraw(); });
+  // on touch screens two quick taps count as a double click and closed the shape too early
+  map.on('dblclick', () => { if (mode === 'draw' && drawPts.length >= 3 && !L.Browser.touch) finishDraw(); });
   function finishDraw() {
     const pts = drawPts.filter((p, i) => i === 0 || p.distanceTo(drawPts[i - 1]) > 0.5);
     const ring = pts.map(p => core.toPL(p.lng, p.lat));
@@ -275,7 +300,11 @@
       setNav('navCalc');
       render();
       // on a phone the panel sits under the map: bring the result into view
-      if (window.innerWidth < 760) $('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      if (document.body.classList.contains('full')) full.getContainer().click();
+      if (window.innerWidth < 760) {
+        if ($('panel').classList.contains('min')) $('toggle').click();
+        $('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
       if (w.data_ha > 0) { loadBdl(polys, shown); loadScanDate(polys, shown); }
     } catch (err) {
       status(err.message, 'err');

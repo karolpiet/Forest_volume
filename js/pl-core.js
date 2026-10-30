@@ -23,6 +23,8 @@
     const img = await tiff.getImage();
     const w = img.getWidth(), h = img.getHeight();
     const [data] = await img.readRasters({ interleave: false });
+    // 8-bit answers are pictures or empty fills, not heights in metres
+    if (data instanceof Uint8Array || data instanceof Int8Array) throw new Error(T('Elevation data ({m}): {msg}', { m: model.toUpperCase(), msg: 'no heights here' }));
     let x0, y0, res;
     try {
       [x0, y0] = img.getOrigin();

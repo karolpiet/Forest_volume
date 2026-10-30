@@ -39,7 +39,7 @@
       <section class="step">
         <h2><span class="num">1</span> <span data-i18n>Find your forest</span></h2>
         <form id="search">
-          <input type="text" id="q" data-i18n-ph placeholder="Place or parcel ID, e.g. Wierzchowiska" data-i18n-aria aria-label="Place or parcel ID, e.g. Wierzchowiska">
+          <input type="text" id="q" data-i18n-ph placeholder="Place, parcel ID or forest address, e.g. Wierzchowiska" data-i18n-aria aria-label="Place, parcel ID or forest address, e.g. Wierzchowiska">
           <button class="primary" type="submit" data-i18n>Find</button>
         </form>
         <div class="pick-label" data-i18n>…or pick it on the map:</div>
@@ -71,14 +71,14 @@
 <script src="vendor/leaflet/leaflet.js"></script>
 <script src="vendor/proj4.js"></script>
 <script src="vendor/geotiff.js"></script>
-<script src="js/i18n.js?v=10"></script>
-<script src="js/core.js?v=6"></script>
-<script src="js/pl-core.js?v=11"></script>
+<script src="js/i18n.js?v=12"></script>
+<script src="js/core.js?v=12"></script>
+<script src="js/pl-core.js?v=13"></script>
 <script src="js/yield.js?v=1"></script>
 <script>
 // address of the Cloudflare Worker that passes the GUGiK elevation models to the browser
 window.ALS.PROXY = 'https://geoportal-proxy.karolpietruszka88-324.workers.dev/';
 </script>
-<script src="js/app.js?v=10"></script>
+<script src="js/app.js?v=12"></script>
 </body>
 </html>

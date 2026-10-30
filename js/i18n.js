@@ -4,6 +4,8 @@
   const ALS = (root.ALS = root.ALS || {});
 
   const PL = {
+  "The Forest Data Bank has no stand with the address {q}.": "W Banku Danych o Lasach nie ma wydzielenia o adresie {q}.",
+  "Place, parcel ID or forest address, e.g. Wierzchowiska": "Miejscowość, nr działki lub adres leśny, np. Wierzchowiska",
   "Laser scan: {y} or earlier. Type the exact year from Geoportal:": "Skaning laserowy: {y} lub wcześniej. Wpisz dokładny rok z Geoportalu:",
   "Check what Geoportal sends:": "Sprawdź, co wysyła Geoportal:",
   "Tap the map to add corners ({n} so far)": "Stukaj w mapę, żeby dodać narożniki (na razie {n})",
@@ -178,6 +180,8 @@
   };
 
   const DE = {
+  "The Forest Data Bank has no stand with the address {q}.": "Die Forstdatenbank hat keinen Bestand mit der Adresse {q}.",
+  "Place, parcel ID or forest address, e.g. Wierzchowiska": "Ort, Flurstücksnummer oder Forstadresse, z. B. Wierzchowiska",
   "Laser scan: {y} or earlier. Type the exact year from Geoportal:": "Laserscan: {y} oder früher. Genaues Jahr aus dem Geoportal eingeben:",
   "Check what Geoportal sends:": "Prüfen, was das Geoportal sendet:",
   "Tap the map to add corners ({n} so far)": "Tippen Sie auf die Karte, um Ecken zu setzen (bisher {n})",

@@ -19,7 +19,10 @@
       throw new Error(T('The elevation data service did not respond. Try again in a moment.'));
     }
     if (!r.ok) throw new Error(T('Elevation data ({m}): {msg}', { m: model.toUpperCase(), msg: (await r.text()).slice(0, 200) }));
-    const tiff = await root.GeoTIFF.fromArrayBuffer(await r.arrayBuffer());
+    const buf = await r.arrayBuffer();
+    // the surface model can come as an ASCII grid (Geoportal sends a picture as TIFF there)
+    if (/^\s*ncols/i.test(new TextDecoder().decode(new Uint8Array(buf, 0, Math.min(16, buf.byteLength))))) return asciiGrid(new TextDecoder().decode(buf));
+    const tiff = await root.GeoTIFF.fromArrayBuffer(buf);
     const img = await tiff.getImage();
     const w = img.getWidth(), h = img.getHeight();
     const [data] = await img.readRasters({ interleave: false });
@@ -36,6 +39,29 @@
     }
     const nod = img.getGDALNoData();
     return { x0, y0, res, w, h, data, nod: nod === null ? -9999 : nod };
+  }
+
+  // ESRI ASCII grid: a header (ncols, nrows, xllcorner|xllcenter, yllcorner|yllcenter,
+  // cellsize, NODATA_value), then the rows from north to south
+  function asciiGrid(text) {
+    const hd = {};
+    let pos = 0;
+    for (;;) {
+      const end = text.indexOf('\n', pos);
+      const line = text.slice(pos, end < 0 ? undefined : end).trim();
+      const m = line.match(/^([a-z_]+)\s+(\S+)$/i);
+      if (!m) break;
+      hd[m[1].toLowerCase()] = +m[2];
+      pos = end + 1;
+    }
+    const w = hd.ncols, h = hd.nrows, res = hd.cellsize;
+    const x0 = 'xllcenter' in hd ? hd.xllcenter - res / 2 : hd.xllcorner;
+    const yll = 'yllcenter' in hd ? hd.yllcenter - res / 2 : hd.yllcorner;
+    const data = new Float32Array(w * h);
+    const vals = text.slice(pos).split(/\s+/);
+    let k = 0;
+    for (const v of vals) { if (v === '') continue; if (k >= data.length) break; data[k++] = +v; }
+    return { x0, y0: yll + h * res, res, w, h, data, nod: 'nodata_value' in hd ? hd.nodata_value : -9999 };
   }
 
   function sample(g, x, y) {  // bilinear value of grid g at (x, y), NaN outside or on nodata

@@ -237,6 +237,16 @@
     e.preventDefault();
     const q = $('q').value.trim();
     if (!q) return;
+    // a forest address: 02-37-2-08-94-a-00 (regional directorate, district, …, compartment, subcompartment)
+    if (/^\s*\d{2}-\d{2}-\d-\d{2}-\d+/.test(q)) {
+      status(T('Looking up the Forest Data Bank (BDL)…'));
+      try {
+        const a = await core.bdlByAddress(q);
+        if (!a) { status(T('The Forest Data Bank has no stand with the address {q}.', { q }), 'err'); return; }
+        run(() => a.label, a.polys);
+      } catch (err) { status(T('The BDL service did not answer: {msg}', { msg: err.message }), 'err'); }
+      return;
+    }
     // a parcel ID has digits and a dot or a slash (140905_5.0031.129/6); anything else is a place name
     if (/\d/.test(q) && /[._/]/.test(q)) {
       status(T('Looking up the parcel in the GUGiK register…'));

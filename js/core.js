@@ -401,7 +401,47 @@
     return { get label() { return T('Compartment {key}', { key }); }, polys: polys.length ? polys : f.polys };
   }
 
-  ALS.core = { compute, bdlPrivateArea, loadChm, loadTrees, parcelByXY, parcelById, bdl, bdlPrivate, parseFile, parseWkt,
+  // --- search by forest address ("02-37-2-08-94-a-00", or a compartment "02-37-2-08-94") ----
+  // The first two digits are the regional directorate. State Forests are asked through the
+  // OGC API (CQL filter on the compartment), non-state forests through the ArcGIS REST layer.
+  const RDLP_CODE = { '01': 'Bialystok', '02': 'Katowice', '03': 'Krakow', '04': 'Krosno', '05': 'Lublin', '06': 'Lodz',
+    '07': 'Olsztyn', '08': 'Pila', '09': 'Poznan', '10': 'Szczecin', '11': 'Szczecinek', '12': 'Torun', '13': 'Wroclaw',
+    '14': 'Zielona_Gora', '15': 'Gdansk', '16': 'Radom', '17': 'Warszawa' };
+  const normAdr = (a) => String(a || '').replace(/\s+/g, '').toLowerCase();
+  async function bdlByAddress(q) {
+    const want = normAdr(q).replace(/-+$/, ''), key = compartment(want), rd = RDLP_CODE[want.slice(0, 2)];
+    // the subcompartment letter and the "-00" part are optional in what the user types
+    const match = (adr) => { const a = normAdr(adr); return a === want || a.startsWith(want + '-') || (want === key && compartment(a) === key); };
+    let feats = [];
+    if (rd) {
+      const base = `${BDL}/RDLP_${rd}_wydzielenia/items?f=json&limit=1000`;
+      const tries = [`${base}&filter-lang=cql-text&filter=${encodeURIComponent(`adr_for LIKE '${key}%'`)}`,
+        `${base}&filter=${encodeURIComponent(`adr_for LIKE '${key}%'`)}`];
+      for (const u of tries) {
+        try {
+          const r = await fetch(u);
+          if (!r.ok) continue;
+          const fs = ((await r.json()).features || []).filter(f => match((f.properties || {}).adr_for));
+          if (fs.length) { feats = fs.map(f => ({ adr: f.properties.adr_for, p: f.properties, polys: featPolys(f) })); break; }
+        } catch (e) { /* try the next form of the query */ }
+      }
+    }
+    if (!feats.length) {
+      try {
+        const fs = await bdlRest({ where: `adress_forest LIKE '${key}%'` });
+        feats = fs.filter(f => match(field(f.a, /^adr|adres|adress/i)))
+          .map(f => ({ adr: field(f.a, /^adr|adres|adress/i), p: { species_cd: field(f.a, /species_cd/i), spec_age: field(f.a, /species_age|spec_age/i) }, polys: f.polys }));
+      } catch (e) { /* the non-state layer did not answer */ }
+    }
+    if (!feats.length) return null;
+    const polys = feats.flatMap(f => f.polys), one = feats.length === 1 ? feats[0] : null;
+    const desc = one ? [one.p.species_cd, one.p.spec_age ? T('{n} y', { n: one.p.spec_age }) : ''].filter(Boolean).join(', ') : '';
+    return { polys, get label() {
+      return one ? T('Subcompartment {adr}', { adr: one.adr.replace(/\s+/g, '') }) + (desc ? ' (' + desc + ')' : '') : T('Compartment {key}', { key: q.trim() });
+    } };
+  }
+
+  ALS.core = { compute, bdlPrivateArea, bdlByAddress, loadChm, loadTrees, parcelByXY, parcelById, bdl, bdlPrivate, parseFile, parseWkt,
     toPL, toWGS, polyArea, bbox, treeVolume, rasterize, percentile, rings, contains, bdlArea, RDLP,
     H_FOREST, H_SHRUB, G_HA, CELL };
 })(typeof window !== 'undefined' ? window : globalThis);

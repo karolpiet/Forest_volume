@@ -4,6 +4,9 @@
   const ALS = (root.ALS = root.ALS || {});
 
   const PL = {
+  "Full-screen map": "Mapa na cały ekran",
+  "Back to the panel": "Wróć do panelu",
+    "Finish the shape": "Zakończ kształt",
     "Yield tables: silvaR package (Socha et al.). Code licensed under GPL-3.": "Tablice zasobności: pakiet silvaR (Socha i in.). Kod na licencji GPL-3.",
     "{t} table": "tablica {t}",
     "outside the area": "poza obszarem",
@@ -162,6 +165,9 @@
   };
 
   const DE = {
+  "Full-screen map": "Karte im Vollbild",
+  "Back to the panel": "Zurück zum Panel",
+    "Finish the shape": "Form abschließen",
     "Yield tables: silvaR package (Socha et al.). Code licensed under GPL-3.": "Ertragstafeln: Paket silvaR (Socha u. a.). Code unter der Lizenz GPL-3.",
     "{t} table": "Tafel {t}",
     "outside the area": "außerhalb der Fläche",

@@ -262,10 +262,16 @@
     return out;
   }
 
-  // CHM of the area as a coloured PNG in lat/lon (2-32 m), resampled from the EPSG:2180
-  // grid so it lines up with the map; returns {url, south, west, north, east}
+  // canopy height classes for the map: upper bound [m] and colour, white through blue,
+  // green, yellow and orange to red and purple (greens alone were hard to read on the forest)
+  const CHM_CLASSES = [[1.3, '#ffffff'], [4, '#c6dbef'], [6.5, '#6baed6'], [9, '#2171b5'], [11.5, '#1a9850'],
+    [14, '#91cf60'], [16.5, '#d9ef8b'], [19, '#fee08b'], [21.5, '#fdae61'], [24, '#f46d43'], [26.5, '#d73027'],
+    [29, '#a50026'], [31.5, '#762a83'], [Infinity, '#40004b']];
+  const CHM_RGB = CHM_CLASSES.map(([, c]) => [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16)));
+
+  // CHM of the area as a coloured PNG in lat/lon (height classes above), resampled from the
+  // EPSG:2180 grid so it lines up with the map; returns {url, south, west, north, east}
   function chmImage(g, H, r0, c0, rows, cols) {
-    const stops = [[236, 244, 200], [173, 214, 120], [96, 166, 82], [38, 112, 62], [12, 58, 34]];  // light to dark green
     const xa = g.x0 + c0 * g.res, ya = g.y0 - r0 * g.res, xb = xa + cols * g.res, yb = ya - rows * g.res;
     const corners = [[xa, ya], [xb, ya], [xa, yb], [xb, yb]].map(([x, y]) => core.toWGS(x, y));
     const west = Math.min(...corners.map(c => c[0])), east = Math.max(...corners.map(c => c[0]));
@@ -286,11 +292,12 @@
         const cc = Math.floor((x - xa) / g.res), rr = Math.floor((ya - y) / g.res);
         if (cc < 0 || rr < 0 || cc >= cols || rr >= rows) continue;
         const h = H[rr * cols + cc];
-        if (Number.isNaN(h) || h < core.H_SHRUB) continue;
-        const t = Math.min(Math.max((h - 2) / 30, 0), 1) * (stops.length - 1), k = Math.min(Math.floor(t), stops.length - 2), f = t - k;
+        if (Number.isNaN(h)) continue;
+        let k = 0;
+        while (h >= CHM_CLASSES[k][0]) k++;
         const i = (r * W + c) * 4;
-        for (let ch = 0; ch < 3; ch++) im.data[i + ch] = stops[k][ch] * (1 - f) + stops[k + 1][ch] * f;
-        im.data[i + 3] = 230;
+        for (let ch = 0; ch < 3; ch++) im.data[i + ch] = CHM_RGB[k][ch];
+        im.data[i + 3] = k ? 230 : 110;  // bare ground only lightly whitened, so the photo shows through
       }
     }
     ctx.putImageData(im, 0, 0);
@@ -403,5 +410,5 @@
     return out;
   }
 
-  ALS.pl = { loadChm, compute, findTrees, chmView, scanDate, standStats, MAX_KM2 };
+  ALS.pl = { loadChm, compute, findTrees, chmView, scanDate, standStats, MAX_KM2, CHM_CLASSES };
 })(typeof window !== 'undefined' ? window : globalThis);

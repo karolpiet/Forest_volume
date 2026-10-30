@@ -63,7 +63,10 @@
   const legend = L.control({ position: 'bottomright' });
   legend.onAdd = () => {
     const el = L.DomUtil.create('div', 'legend');
-    el.innerHTML = `<div><b>${T('Canopy height')}</b><div class="bar" style="background:linear-gradient(90deg,#ecf4c8,#add678,#60a652,#26703e,#0c3a22)"></div><div class="ends"><span>2 m</span><span>32 m</span></div></div>`;
+    // one row per height class, the same colours as the canopy picture on the map
+    const cl = ALS.pl.CHM_CLASSES, n = (v) => Number(v).toLocaleString(ALS.locale(), { maximumFractionDigits: 1 });
+    const rows = cl.map(([to, c], i) => `<div class="cls"><i style="background:${c}"></i>${i === 0 ? '&lt; ' + n(to) : i === cl.length - 1 ? '&gt; ' + n(cl[i - 1][0]) : n(cl[i - 1][0]) + '–' + n(to)}</div>`).join('');
+    el.innerHTML = `<div><b>${T('Canopy height')} [m]</b><div class="classes">${rows}</div></div>`;
     return el;
   };
 

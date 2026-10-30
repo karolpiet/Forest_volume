@@ -105,6 +105,9 @@ svg text{font:10px var(--sans);fill:var(--muted)}
 .legend{background:#fffdf8f2;padding:8px 10px;border-radius:8px;font:12px var(--sans);box-shadow:0 1px 6px #0003;line-height:1.5;color:var(--text)}
 .legend .bar{width:160px;height:10px;border-radius:3px;margin:3px 0}
 .legend .ends{display:flex;justify-content:space-between}
+.legend .classes{display:grid;grid-template-rows:repeat(7,auto);grid-auto-flow:column;column-gap:10px;margin-top:3px}
+.legend .cls{display:flex;align-items:center;gap:5px;white-space:nowrap}
+.legend .cls i{width:14px;height:10px;border:1px solid #0003;border-radius:2px;flex:none}
 .zoomhint{background:#fffdf8f2;padding:6px 10px;border-radius:8px;font:600 12px var(--sans);color:var(--pine);box-shadow:0 1px 6px #0003}
 .area-label{background:var(--amber);color:#1f2a17;border:0;font-weight:700;box-shadow:0 1px 4px #0005}
 .area-label::before{display:none}
@@ -140,6 +143,8 @@ body.full .topbar,body.full #panel{display:none}
   .legend{padding:5px 8px;font-size:11px}
   .legend{line-height:1.3}
   .legend .bar{width:80px;height:6px;margin:2px 0}
+  .legend .classes{column-gap:6px}
+  .legend .cls i{width:10px;height:8px}
   .leaflet-control-scale{display:none}
   .leaflet-control-attribution{font-size:9px;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   #panel.min{height:auto;max-height:0;overflow:hidden;border-top:0}

@@ -264,9 +264,9 @@
 
   // canopy height classes for the map: upper bound [m] and colour, white through blue,
   // green, yellow and orange to red and purple (greens alone were hard to read on the forest)
-  const CHM_CLASSES = [[1.3, '#ffffff'], [4, '#c6dbef'], [6.5, '#6baed6'], [9, '#2171b5'], [11.5, '#1a9850'],
-    [14, '#91cf60'], [16.5, '#d9ef8b'], [19, '#fee08b'], [21.5, '#fdae61'], [24, '#f46d43'], [26.5, '#d73027'],
-    [29, '#a50026'], [31.5, '#762a83'], [Infinity, '#40004b']];
+  const CHM_CLASSES = [[1.3, '#ffffff'], [4, '#a8d0f0'], [6.5, '#5aa0e6'], [9, '#a0e080'], [11.5, '#40d040'],
+    [14, '#5a9a3a'], [16.5, '#c8c83c'], [19, '#f0f040'], [21.5, '#f0c020'], [24, '#f09030'], [26.5, '#f05030'],
+    [29, '#e02020'], [31.5, '#e040c0'], [Infinity, '#a040c0']];
   const CHM_RGB = CHM_CLASSES.map(([, c]) => [1, 3, 5].map(i => parseInt(c.slice(i, i + 2), 16)));
 
   // CHM of the area as a coloured PNG in lat/lon (height classes above), resampled from the

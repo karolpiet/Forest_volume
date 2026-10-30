@@ -15,26 +15,23 @@
     '?SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=ORTOFOTOMAPA&STYLE=default&FORMAT=image/jpeg' +
     '&TILEMATRIXSET=EPSG:3857&TILEMATRIX=EPSG:3857:{z}&TILEROW={y}&TILECOL={x}',
     { maxZoom: 21, maxNativeZoom: 19, attribution: 'Orthophoto &copy; GUGiK' });
-  // KIEG draws county parcels below 1:10 000 (zoom 16+); where a county has no service the
-  // parcels come from the LPIS supplement ('geoportal'), drawn only below 1:2 500 (zoom 18+);
-  // parcel numbers below 1:1 500 (zoom 19+)
-  const kieg = L.tileLayer.wms('https://integracja.gugik.gov.pl/cgi-bin/KrajowaIntegracjaEwidencjiGruntow',
-    { layers: 'geoportal,dzialki,numery_dzialek', format: 'image/png', transparent: true, minZoom: 16, maxZoom: 21,
-      pane: 'lines', attribution: 'Parcels &copy; GUGiK (KIEG)' });
-  // the BDL map is asked for as one picture of the whole view, not in tiles: the server
-  // labels every polygon in each picture it draws, so tiles repeated the same address
-  // in every tile it touched
-  const BdlWms = L.Layer.extend({
-    options: { pane: 'lines', attribution: 'Forest Data Bank &copy; BDL', minZoom: 13 },
+  // the parcel and BDL maps are asked for as one picture of the whole view, not in tiles:
+  // the servers label every polygon in each picture they draw, so tiles repeated the same
+  // number or address in every tile it touched
+  const ViewWms = L.Layer.extend({
+    options: { pane: 'lines', minZoom: 0, version: '1.3.0' },
+    initialize(url, layers, opt) { this._url = url; this._layers = layers; L.setOptions(this, opt); },
     onAdd(m) { this._m = m; m.on('moveend', this._update, this); this._update(); },
-    onRemove(m) { m.off('moveend', this._update, this); for (const l of [this._img, this._old]) if (l) m.removeLayer(l); this._img = this._old = null; },
+    onRemove(m) { m.off('moveend', this._update, this); this._clear(); },
+    _clear() { for (const l of [this._img, this._old]) if (l) this._m.removeLayer(l); this._img = this._old = null; },
     _update() {
       const m = this._m;
-      if (m.getZoom() < this.options.minZoom) { if (this._img) { m.removeLayer(this._img); this._img = null; } return; }
+      if (m.getZoom() < this.options.minZoom) return this._clear();
       const b = m.getBounds(), size = m.getSize();
       const sw = L.CRS.EPSG3857.project(b.getSouthWest()), ne = L.CRS.EPSG3857.project(b.getNorthEast());
-      const url = 'https://mapserver.bdl.lasy.gov.pl/ArcGIS/services/WMS_BDL/mapserver/WMSServer?SERVICE=WMS&REQUEST=GetMap' +
-        '&VERSION=1.3.0&LAYERS=0,1,2,3&STYLES=&FORMAT=image/png&TRANSPARENT=true&CRS=EPSG:3857' +
+      const v13 = this.options.version === '1.3.0';
+      const url = this._url + '?SERVICE=WMS&REQUEST=GetMap&VERSION=' + this.options.version +
+        `&LAYERS=${this._layers}&STYLES=&FORMAT=image/png&TRANSPARENT=true&${v13 ? 'CRS' : 'SRS'}=EPSG:3857` +
         `&BBOX=${sw.x},${sw.y},${ne.x},${ne.y}&WIDTH=${size.x}&HEIGHT=${size.y}`;
       // the old picture stays until the new one has loaded, so the map does not flicker
       const img = L.imageOverlay(url, b, { pane: this.options.pane, attribution: this.options.attribution });
@@ -43,7 +40,13 @@
       this._old = this._img; this._img = img; img.addTo(m);
     },
   });
-  const bdlWms = new BdlWms();
+  // KIEG draws county parcels below 1:10 000 (zoom 16+); where a county has no service the
+  // parcels come from the LPIS supplement ('geoportal'), drawn only below 1:2 500 (zoom 18+);
+  // parcel numbers below 1:1 500 (zoom 19+)
+  const kieg = new ViewWms('https://integracja.gugik.gov.pl/cgi-bin/KrajowaIntegracjaEwidencjiGruntow',
+    'geoportal,dzialki,numery_dzialek', { minZoom: 16, version: '1.1.1', attribution: 'Parcels &copy; GUGiK (KIEG)' });
+  const bdlWms = new ViewWms('https://mapserver.bdl.lasy.gov.pl/ArcGIS/services/WMS_BDL/mapserver/WMSServer',
+    '0,1,2,3', { minZoom: 13, attribution: 'Forest Data Bank &copy; BDL' });
   const chmLayer = L.layerGroup(), trees = L.layerGroup(), liveChm = L.layerGroup();
   orto.addTo(map); kieg.addTo(map); chmLayer.addTo(map); liveChm.addTo(map);
 

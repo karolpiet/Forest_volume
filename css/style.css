@@ -129,3 +129,7 @@ svg text{font:10px var(--sans);fill:var(--muted)}
 .src li{margin-bottom:6px}
 .rc-scan{font-size:.82rem;opacity:.9;margin-top:8px;line-height:1.4;min-height:1.1em}
 .rc-scan b{color:#ffd58f}
+.rc-today{font-size:.92rem;margin-top:6px;line-height:1.4}
+.rc-today:empty{display:none}
+.rc-today b{font-family:var(--display);font-size:1.15rem;color:#ffd58f}
+.rc-today small{opacity:.8}

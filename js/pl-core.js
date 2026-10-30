@@ -198,6 +198,8 @@
     }
     out.vol_canopy = vB;
     out.image = chmImage(g, H, r0, c0, rows, cols);
+    // the canopy height of the area, kept for the yield-table estimate per stand
+    out.grid = { H, rows, cols, res, x0: g.x0 + c0 * res, y0: g.y0 - r0 * res };
     return out;
   }
 
@@ -282,5 +284,40 @@
     return { date, year: +date.slice(0, 4) };
   }
 
-  ALS.pl = { loadChm, compute, findTrees, chmView, scanDate, MAX_KM2 };
+  // --- stands: top height and canopy cover per BDL stand, on 10 m cells ---------------
+  // Top height as in silvaR th_calc(): CHM averaged to 10 m cells, then the mean of the
+  // cells above 2/3 of the stand's mean. owner(x, y) says which stand a cell centre is in.
+  function standStats(grid, owner) {
+    const { H, rows, cols, res } = grid, k = Math.max(1, Math.round(10 / res)), px = res * res;
+    const st = new Map();
+    for (let i = 0; i < rows; i += k) {
+      for (let j = 0; j < cols; j += k) {
+        let n = 0, sum = 0, tall = 0;
+        for (let a = i; a < Math.min(i + k, rows); a++) {
+          for (let b = j; b < Math.min(j + k, cols); b++) {
+            const h = H[a * cols + b];
+            if (Number.isNaN(h)) continue;
+            n++; sum += h; if (h >= core.H_FOREST) tall++;
+          }
+        }
+        if (!n) continue;
+        const x = grid.x0 + (j + k / 2) * res, y = grid.y0 - (i + k / 2) * res;
+        const id = owner(x, y);
+        if (id === null || id === undefined) continue;
+        const e = st.get(id) || { cells: [], n: 0, tall: 0 };
+        e.cells.push(sum / n); e.n += n; e.tall += tall;
+        st.set(id, e);
+      }
+    }
+    const out = new Map();
+    for (const [id, e] of st) {
+      const m = e.cells.reduce((a, b) => a + b, 0) / e.cells.length;
+      const top = e.cells.filter(v => v > m * 2 / 3);
+      out.set(id, { th: top.length ? top.reduce((a, b) => a + b, 0) / top.length : NaN,
+        cover: e.tall / e.n, ha: e.n * px / 1e4 });
+    }
+    return out;
+  }
+
+  ALS.pl = { loadChm, compute, findTrees, chmView, scanDate, standStats, MAX_KM2 };
 })(typeof window !== 'undefined' ? window : globalThis);

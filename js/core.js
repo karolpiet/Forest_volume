@@ -338,7 +338,41 @@
     return planar ? polys : polys.map(p => p.map(r => r.map(([lon, lat]) => toPL(lon, lat))));
   }
 
-  ALS.core = { compute, loadChm, loadTrees, parcelByXY, parcelById, bdl, parseFile, parseWkt,
+  // --- non-state forests: the BDL map service also has subcompartments outside the State
+  // Forests (from their forest management plans), but only through WMS GetFeatureInfo.
+  // The area is sampled on a grid of points; the share of points gives the hectares.
+  const BDL_WMS = 'https://mapserver.bdl.lasy.gov.pl/ArcGIS/services/WMS_BDL/mapserver/WMSServer';
+  async function bdlPrivate(polys) {
+    const [x0, y0, x1, y1] = bbox(polys), rs = rings(polys);
+    const pts = [], n = 6;
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) {
+      const x = x0 + (x1 - x0) * (i + 0.5) / n, y = y0 + (y1 - y0) * (j + 0.5) / n;
+      if (contains(rs, x, y)) pts.push([x, y]);
+    }
+    if (!pts.length) return [];
+    const hits = await Promise.all(pts.map(async ([x, y]) => {
+      const [lon, lat] = toWGS(x, y), d = 1e-5;
+      const q = `?SERVICE=WMS&VERSION=1.1.1&REQUEST=GetFeatureInfo&LAYERS=0&QUERY_LAYERS=0&SRS=EPSG:4326&STYLES=&FORMAT=image/png` +
+        `&BBOX=${lon - d},${lat - d},${lon + d},${lat + d}&WIDTH=3&HEIGHT=3&X=1&Y=1&INFO_FORMAT=text/xml&FEATURE_COUNT=1`;
+      const r = await fetch(BDL_WMS + q);
+      if (!r.ok) throw new Error('BDL WMS HTTP ' + r.status);
+      const doc = new DOMParser().parseFromString(await r.text(), 'text/xml');
+      const f = [...doc.getElementsByTagName('*')].find(e => e.getAttribute && e.getAttribute('species_cd_d') !== null);
+      if (!f) return null;
+      const at = (k) => { const v = f.getAttribute(k); return v && v !== 'Null' ? v.trim() : ''; };
+      return { id: at('subarea_id') || at('adress_forest'), adr_for: at('adress_forest'), species_cd: at('species_cd_d'),
+        spec_age: at('species_age'), a_year: at('a_year'), owner: at('owner_cat_name'), _pt: [x, y] };
+    }));
+    const area = polyArea(polys) / 1e4, by = {};
+    for (const h of hits) {
+      if (!h) continue;
+      const e = (by[h.id] = by[h.id] || Object.assign(h, { n: 0, _pts: [] }));
+      e.n++; e._pts.push(h._pt);
+    }
+    return Object.values(by).map(h => Object.assign(h, { _ha: area * h.n / pts.length, _approx: true })).sort((a, b) => b._ha - a._ha);
+  }
+
+  ALS.core = { compute, loadChm, loadTrees, parcelByXY, parcelById, bdl, bdlPrivate, parseFile, parseWkt,
     toPL, toWGS, polyArea, bbox, treeVolume, rasterize, percentile, rings, contains, bdlArea, RDLP,
     H_FOREST, H_SHRUB, G_HA, CELL };
 })(typeof window !== 'undefined' ? window : globalThis);

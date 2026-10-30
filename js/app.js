@@ -182,9 +182,42 @@
     e.preventDefault();
     const q = $('q').value.trim();
     if (!q) return;
-    status(T('Looking up the parcel in the GUGiK register…'));
-    try { showParcels(await core.parcelById(q)); } catch (err) { status(err.message, 'err'); }
+    // a parcel ID has digits and a dot or a slash (140905_5.0031.129/6); anything else is a place name
+    if (/\d/.test(q) && /[._/]/.test(q)) {
+      status(T('Looking up the parcel in the GUGiK register…'));
+      try { showParcels(await core.parcelById(q)); } catch (err) { status(err.message, 'err'); }
+      return;
+    }
+    status(T('Looking for the place…'));
+    try { showPlaces(await findPlace(q)); } catch (err) { status(T('The place search did not answer. Try again in a moment.'), 'err'); }
   };
+
+  // place names: OpenStreetMap Nominatim, limited to Poland
+  async function findPlace(q) {
+    const r = await fetch('https://nominatim.openstreetmap.org/search?format=jsonv2&countrycodes=pl&limit=6&accept-language=' +
+      ALS.lang() + '&q=' + encodeURIComponent(q));
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }
+  function goTo(p) {
+    status('');
+    const b = p.boundingbox && p.boundingbox.map(Number);
+    if (b && b[1] - b[0] < 0.2) map.fitBounds([[b[0], b[2]], [b[1], b[3]]], { maxZoom: 16 });
+    else map.setView([+p.lat, +p.lon], 15);
+    // the parcels are drawn from zoom 16: make sure the user lands close enough to click one
+    map.once('moveend', () => { if (map.getZoom() < 16) map.setZoom(16); });
+    setMode('pick');
+  }
+  function showPlaces(list) {
+    if (!list.length) { status(T('Nothing found. Check the spelling or type a parcel ID.'), 'err'); return; }
+    if (list.length === 1) return goTo(list[0]);
+    status('');
+    shown = null;
+    $('result').innerHTML = `<div class="area-title">${T('Which place did you mean?')}</div><div class="choices"></div>`;
+    const box = $('result').querySelector('.choices');
+    list.forEach(p => { const b = document.createElement('button'); b.type = 'button'; b.textContent = p.display_name;
+      b.onclick = () => { goTo(p); showIntro(); }; box.appendChild(b); });
+  }
 
   $('file').onchange = async () => {
     const f = $('file').files[0];
@@ -276,7 +309,7 @@
         <h3>${T('How far can you trust this?')}</h3>
         <ul>
           <li>${T('It is an estimate, not a measurement: expect an error of at least ±25%.')}</li>
-          <li>${T('The formulas are for Scots pine. In spruce, beech or oak stands the real volume can differ a lot.')}</li>
+          <li>${T('Methods A and B assume Scots pine. Method C uses the species from the Forest Data Bank, but only where a stand description exists.')}</li>
           <li>${T('The laser scan is a few years old (2011–2023 depending on the region); trees cut or grown since then are not seen.')}</li>
           <li>${T('Buildings and other tall objects inside the area are counted as trees.')}</li>
           <li>${T('For a sale or valuation of timber, ask a forester to measure it in the field.')}</li>
@@ -316,6 +349,7 @@
           <span class="m b" style="left:${pos(B)}" title="${esc(T('B) from canopy height & closure'))}">B</span>
         </div>
         <div class="rc-scan" id="scan"></div>
+        <div class="rc-today" id="today"></div>
         <div class="rc-chips">
           <span>${T('{ha} ha of forest', { ha: fmt(w.forest_ha, w.forest_ha < 10 ? 2 : 1) })}</span>
           <span>≈ ${nice(mid / w.forest_ha)} m³/ha</span>
@@ -349,10 +383,12 @@
         <tr><td>${esc(T('B) from canopy height & closure'))}</td><td>${fmt(B)} m³${per(B)}</td></tr>
       </table>
       <p class="note">${T('A adds up the volume of every tree top found; in dense stands crowns merge, so it is usually too low. B works from canopy height and closure in 20 m squares and is the steadier number. The truth is usually close to or between them.')}</p>
+      <div id="yield"></div>
       <div id="bdl"></div>
       ${honest()}`;
     renderBdl();
     renderScan();
+    renderYield();
   }
 
   function renderBdl() {
@@ -361,7 +397,10 @@
     const head = `<h3>${T('Forest Data Bank (BDL)')}</h3>`;
     if (b.loading) box.innerHTML = head + `<div class="note">${T('Asking bdl.lasy.gov.pl for forest subcompartments…')}</div>`;
     else if (b.error) box.innerHTML = head + `<div class="note">${T('The BDL service did not answer right now, so stand descriptions are missing.')}</div>`;
-    else if (!b.items.length) box.innerHTML = head + `<div class="note">${T('No State Forests subcompartments in this area (probably a private forest).')}</div>`;
+    else if (!b.items.length) box.innerHTML = head + `<div class="note">${T('This forest has no description in the Forest Data Bank.')}</div>`;
+    else if (b.private) box.innerHTML = `<h3>${T('Forest Data Bank (BDL): non-state forest')}</h3><table><tr><td><b>${T('Forest address')}</b></td><td><b>${T('ha here · species · age')}</b></td></tr>` +
+      b.items.map(p => `<tr><td>${String(p.adr_for || '').replace(/\s+/g, ' ')}${p.owner ? ` <small>(${p.owner})</small>` : ''}</td><td>~${fmt(p._ha, 2)} · ${p.species_cd || '–'} · ${p.spec_age ? T('{a} y in {y}', { a: p.spec_age, y: p.a_year || '?' }) : '–'}</td></tr>`).join('') +
+      `</table><p class="note">${T('From the forest management plan of a non-state forest (year of the description in the table). Hectares are approximate.')}</p>`;
     else box.innerHTML = `<h3>${T('Forest Data Bank (BDL), RDLP {r}', { r: b.rdlp })}</h3><table><tr><td><b>${T('Forest address')}</b></td><td><b>${T('ha here · species · age')}</b></td></tr>` +
       b.items.map(p => `<tr><td>${String(p.adr_for || '').replace(/\s+/g, ' ')}</td><td>${fmt(p._ha, 2)} · ${p.species_cd || '–'} · ${p.spec_age || '–'}</td></tr>`).join('') +
       `</table><p class="note">${T('Dominant species and stand age from the official forest inventory.')}</p>`;
@@ -372,8 +411,66 @@
     const other = {};
     (b.items || []).filter(p => p.species_cd && !/^SO/i.test(p.species_cd)).forEach(p => { other[p.species_cd] = (other[p.species_cd] || 0) + p._ha; });
     const share = all > 0 ? Object.values(other).reduce((a, v) => a + v, 0) / all : 0;
-    sp.innerHTML = share > 0.3 ? `<div class="warn">${T('According to the Forest Data Bank, {p}% of the State Forests stands here are dominated by species other than pine ({sp}). The pine formulas can be well off for them.',
+    sp.innerHTML = share > 0.3 ? `<div class="warn">${T('According to the Forest Data Bank, {p}% of the stands here are dominated by species other than pine ({sp}). The pine formulas can be well off for them.',
       { p: fmt(share * 100), sp: Object.keys(other).sort((x, y) => other[y] - other[x]).slice(0, 4).join(', ') })}</div>` : '';
+  }
+
+  // --- C) yield tables: species and age from BDL, top height from the laser data ----------
+  // Each stand of the Forest Data Bank in the area gets its 10 m cells; their top height,
+  // the stand age at the scan and the species give the yield-table volume (Szymkiewicz,
+  // through the silvaR models), scaled by the canopy cover in place of the stocking. The
+  // height is then grown to today with the species' site index curve.
+  function computeYield(s) {
+    const b = s.bdl, sc = s.scan;
+    if (!b || b.loading || !sc || sc.loading || !s.w.grid) return;
+    if (b.error || !b.items.length) { s.yt = null; renderYield(); return; }
+    const Y = ALS.yield, now = new Date().getFullYear();
+    const lp = b.items.map(p => p._polys ? core.rings(p._polys) : null);
+    const pts = b.private ? b.items.flatMap((p, i) => (p._pts || []).map(q => [q[0], q[1], i])) : [];
+    const owner = (x, y) => {
+      if (!b.private) { const i = lp.findIndex(r => r && core.contains(r, x, y)); return i < 0 ? null : i; }
+      let best = null, d = Infinity;
+      for (const [px, py, i] of pts) { const e = (px - x) ** 2 + (py - y) ** 2; if (e < d) { d = e; best = i; } }
+      return best;
+    };
+    const stats = pl.standStats(s.w.grid, owner);
+    const rows = b.items.map((p, i) => {
+      const st = stats.get(i), g = Y.groups(p.species_cd), age = +p.spec_age, ay = +p.a_year || now;
+      const r = { p, st, sp: p.species_cd || '–' };
+      if (!st) return Object.assign(r, { skip: 'out' });
+      if (!g) return Object.assign(r, { skip: 'species' });
+      if (!(age > 0)) return Object.assign(r, { skip: 'age' });
+      // without the scan date the laser heights are taken as of the year of the description
+      const sy = sc.year || ay, ageScan = age + sy - ay, ageNow = age + now - ay;
+      if (ageScan < 10 || !(st.th >= 5)) return Object.assign(r, { skip: 'young' });
+      const v0 = Y.vTab(ageScan, st.th, p.species_cd), hNow = Y.thGrowth(ageScan, ageNow, st.th, g.th);
+      const v1 = Y.vTab(ageNow, hNow, p.species_cd);
+      if (!(v0 > 0 && v1 > 0)) return Object.assign(r, { skip: 'age' });
+      return Object.assign(r, { vt: g.vt, ageScan, ageNow, sy, th: st.th, hNow, m0: v0 * st.cover * st.ha, m1: v1 * st.cover * st.ha });
+    });
+    const ok = rows.filter(r => r.m1 > 0);
+    const ha = ok.reduce((a, r) => a + r.st.ha, 0);
+    s.yt = { rows, ok: ok.length, ha, share: s.w.data_ha > 0 ? ha / s.w.data_ha : 0,
+      m0: ok.reduce((a, r) => a + r.m0, 0), m1: ok.reduce((a, r) => a + r.m1, 0), now, scanKnown: !!sc.year };
+    if (shown === s) renderYield();
+  }
+
+  function renderYield() {
+    const box = $('yield'), today = $('today'), y = shown && shown.yt;
+    if (!box || !today) return;
+    if (!y) { box.innerHTML = ''; today.innerHTML = ''; return; }
+    const why = { out: T('outside the area'), species: T('no yield table for this species'), age: T('no age in the description'), young: T('young stand (under 10 years or 5 m)') };
+    const yr = y.rows.find(r => r.sy) ? y.rows.find(r => r.sy).sy : null;
+    today.innerHTML = y.ok ? T('Today by yield tables: ≈ {v} m³', { v: `<b>${nice(y.m1)}</b>` }) +
+      (y.share < 0.9 ? ' <small>' + T('(for the {p}% of the area described in BDL)', { p: fmt(y.share * 100) }) + '</small>' : '') : '';
+    box.innerHTML = `<h3>${T('C) Yield tables by species')}</h3>
+      <p class="note">${T('Species and age from the Forest Data Bank, top height from the laser data, volume from the Szymkiewicz yield tables (silvaR models), scaled by the canopy cover. Then grown to {now}.', { now: y.now })}</p>
+      ${y.scanKnown ? '' : `<div class="warn">${T('The scan date is unknown, so the laser heights are taken as of the year of the stand description.')}</div>`}
+      <table><tr><td><b>${T('Stand · species · age')}</b></td><td><b>${T('m³ at scan → today')}</b></td></tr>` +
+      y.rows.map(r => r.skip ? `<tr><td>${String(r.p.adr_for || '').replace(/\s+/g, ' ')} · ${r.sp}</td><td><small>${why[r.skip]}</small></td></tr>`
+        : `<tr><td>${String(r.p.adr_for || '').replace(/\s+/g, ' ')} · ${r.sp}${r.vt !== r.sp.split('.')[0] ? ` <small>(${T('{t} table', { t: r.vt })})</small>` : ''} · ${T('{a}→{b} y', { a: r.ageScan, b: r.ageNow })}<br><small>${T('top height {h0}→{h1} m, {ha} ha', { h0: fmt(r.th, 1), h1: fmt(r.hNow, 1), ha: fmt(r.st.ha, 2) })}</small></td><td>${fmt(r.m0)} → ${fmt(r.m1)}</td></tr>`).join('') +
+      (y.ok ? `<tr><td><b>${T('Total ({ha} ha)', { ha: fmt(y.ha, 2) })}</b></td><td><b>${fmt(y.m0)} → ${fmt(y.m1)} m³</b></td></tr>` : '') +
+      `</table>${yr ? `<p class="note">${T('Scan year used: {y}.', { y: yr })}</p>` : ''}`;
   }
 
   async function loadScanDate(polys, s) {
@@ -384,6 +481,7 @@
     if (shown !== s) return;
     s.scan = d || { unknown: true };
     renderScan();
+    computeYield(s);
   }
 
   // how old the laser data are: shown in the result card
@@ -404,6 +502,13 @@
       const { rdlp, items } = await core.bdl(polys);
       if (shown !== s) return;  // another area was picked meanwhile
       s.bdl = { rdlp, items };
+      // no State Forests here: look for a non-state forest plan (private, municipal…)
+      if (!items.length) {
+        let priv = [];
+        try { priv = await core.bdlPrivate(polys); } catch (e) { priv = []; }
+        if (shown !== s) return;
+        s.bdl = { rdlp: null, items: priv, private: true };
+      }
       if (items.length) bdlLayer = L.layerGroup(items.map(p => L.polygon(p._polys.map(pp => pp.map(r => r.map(([x, y]) => ll(x, y)))),
         { color: '#1d4e1d', weight: 1.5, fill: false, dashArray: '2 3' }).bindTooltip(String(p.adr_for || '')))).addTo(map);
     } catch (err) {
@@ -411,6 +516,7 @@
       s.bdl = { error: true };
     }
     renderBdl();
+    computeYield(s);
   }
 
   // --- language -------------------------------------------------------------

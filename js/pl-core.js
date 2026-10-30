@@ -13,7 +13,8 @@
 
   // --- fetching the elevation models ------------------------------------------------
   async function getGrid(model, bb, v) {
-    const url = ALS.PROXY + '?m=' + model + '&bbox=' + bb.join(',') + (v ? '&v=' + v : '');
+    // f=2: the answers changed (grids instead of pictures), so older copies in the browser cache are skipped
+    const url = ALS.PROXY + '?m=' + model + '&bbox=' + bb.join(',') + (v ? '&v=' + v : '') + '&f=2';
     let r;
     try { r = await fetch(url); } catch (e) {
       throw new Error(T('The elevation data service did not respond. Try again in a moment.'));
@@ -22,6 +23,11 @@
     const buf = await r.arrayBuffer();
     // the surface model can come as an ASCII grid (Geoportal sends a picture as TIFF there)
     if (/^\s*ncols/i.test(new TextDecoder().decode(new Uint8Array(buf, 0, Math.min(16, buf.byteLength))))) return asciiGrid(new TextDecoder().decode(buf));
+    const b0 = new Uint8Array(buf, 0, Math.min(2, buf.byteLength));
+    if (!((b0[0] === 0x49 && b0[1] === 0x49) || (b0[0] === 0x4d && b0[1] === 0x4d))) {
+      // neither a TIFF nor a grid: show the start of what came, so it can be traced
+      throw new Error(T('Elevation data ({m}): {msg}', { m: model.toUpperCase(), msg: new TextDecoder().decode(new Uint8Array(buf, 0, Math.min(160, buf.byteLength))).replace(/[^\x20-\x7e]+/g, ' ') }));
+    }
     const tiff = await root.GeoTIFF.fromArrayBuffer(buf);
     const img = await tiff.getImage();
     const w = img.getWidth(), h = img.getHeight();
